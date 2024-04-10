@@ -1,3 +1,12 @@
 [workspace]
 members = ["blog-*"]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+blog-adapter = { path = "blog-adapter" }
+blog-app = { path = "blog-app" }
+blog-domain = { path = "blog-domain" }

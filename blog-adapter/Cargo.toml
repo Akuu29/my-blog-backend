@@ -1,10 +1,10 @@
 [package]
 name = "blog-adapter"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 async-trait = "0.1.79"
-blog-domain = { path = "../blog-domain" }
+blog-domain.workspace = true

@@ -1,14 +1,14 @@
 [package]
 name = "blog-driver"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-blog-adapter = { path = "../blog-adapter" }
-blog-app = { path = "../blog-app" }
-blog-domain = { path = "../blog-domain" }
+blog-adapter.workspace = true
+blog-app.workspace = true
+blog-domain.workspace = true
 axum = "0.7.4"
 dotenv = "0.15.0"
 tokio = { version = "1.37.0", features = ["full"] }
