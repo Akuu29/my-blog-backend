@@ -12,23 +12,23 @@ impl<T: ArticleRepository> ArticleUsecase<T> {
         Self { repository }
     }
 
-    pub async fn create(&self, payload: NewArticle) -> Article {
+    pub async fn create(&self, payload: NewArticle) -> anyhow::Result<Article> {
         self.repository.create(payload).await
     }
 
-    pub async fn find(&self, id: i32) -> Option<Article> {
+    pub async fn find(&self, id: i32) -> anyhow::Result<Article> {
         self.repository.find(id).await
     }
 
-    pub async fn all(&self) -> Vec<Article> {
+    pub async fn all(&self) -> anyhow::Result<Vec<Article>> {
         self.repository.all().await
     }
 
-    pub async fn update(&self, id: i32, payload: UpdateArticle) -> Article {
+    pub async fn update(&self, id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
         self.repository.update(id, payload).await
     }
 
-    pub async fn delete(&self, id: i32) {
+    pub async fn delete(&self, id: i32) -> anyhow::Result<()> {
         self.repository.delete(id).await
     }
 }

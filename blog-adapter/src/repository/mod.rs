@@ -7,6 +7,15 @@ use std::{
     collections::HashMap,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+enum RepositoryError {
+    #[error("Unexpected Error: [{0}]")]
+    Unexpected(String),
+    #[error("NotFound, id is {0}")]
+    NotFound(i32),
+}
 
 type Articles = HashMap<i32, Article>;
 
@@ -33,7 +42,7 @@ impl RepositoryForMemory {
 
 #[async_trait]
 impl ArticleRepository for RepositoryForMemory {
-    async fn create(&self, payload: NewArticle) -> Article {
+    async fn create(&self, payload: NewArticle) -> anyhow::Result<Article> {
         let mut store = self.write_store_ref();
         let id = (store.len() + 1) as i32;
         let article = Article {
@@ -44,28 +53,33 @@ impl ArticleRepository for RepositoryForMemory {
         };
 
         store.insert(id, article.clone());
-        article
+        Ok(article)
     }
 
-    async fn find(&self, id: i32) -> Option<Article> {
+    async fn find(&self, id: i32) -> anyhow::Result<Article> {
         let store = self.read_store_ref();
-        let article = store.get(&id).map(|article| article.clone());
+        let article = store
+            .get(&id)
+            .map(|article| article.clone())
+            .ok_or(RepositoryError::NotFound(id))?;
 
-        article
+        Ok(article)
     }
 
-    async fn all(&self) -> Vec<Article> {
+    async fn all(&self) -> anyhow::Result<Vec<Article>> {
         let store = self.read_store_ref();
 
-        Vec::from_iter(store.values().map(|article| article.clone()))
+        Ok(Vec::from_iter(
+            store.values().map(|article| article.clone()),
+        ))
     }
 
-    async fn update(&self, id: i32, payload: UpdateArticle) -> Article {
+    async fn update(&self, id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
         let mut store = self.write_store_ref();
         let article = store.get(&id).unwrap();
         let title = payload.title.unwrap_or(article.title.clone());
         let body = payload.body.unwrap_or(article.body.clone());
-        let status = payload.status.unwrap_or(article.status);
+        let status = payload.status.unwrap_or(article.status.clone());
         let article = Article {
             id,
             title,
@@ -74,12 +88,13 @@ impl ArticleRepository for RepositoryForMemory {
         };
 
         store.insert(id, article.clone());
-        article
+        Ok(article)
     }
 
-    async fn delete(&self, id: i32) -> () {
+    async fn delete(&self, id: i32) -> anyhow::Result<()> {
         let mut store = self.write_store_ref();
 
         store.remove(&id).unwrap();
+        Ok(())
     }
 }

@@ -6,5 +6,6 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow.workspace = true
 async-trait = "0.1.79"
 blog-domain.workspace = true
