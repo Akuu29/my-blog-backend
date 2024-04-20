@@ -2,9 +2,10 @@ use crate::handler::article::{
     all_articles, create_article, delete_article, find_article, update_article,
 };
 use axum::{routing::get, Extension, Router};
-use blog_adapter::repository::RepositoryForMemory;
+use blog_adapter::repository::RepositoryForDb;
 use blog_app::usecase::article::ArticleUsecase;
 use blog_domain::repository::article::ArticleRepository;
+use sqlx::PgPool;
 use std::{env, sync::Arc};
 
 pub async fn create_server() {
@@ -13,7 +14,14 @@ pub async fn create_server() {
     tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
 
-    let repository = RepositoryForMemory::new();
+    let database_url = env::var("DATABASE_URL").expect("undefined DATABASE_URL");
+    tracing::debug!("start connecting to database");
+    let pool = PgPool::connect(&database_url).await.expect(&format!(
+        "failed to connect to database, url is {}",
+        database_url
+    ));
+
+    let repository = RepositoryForDb::new(pool);
     let usecase = ArticleUsecase::new(repository);
     let router = create_router(usecase);
     let addr = &env::var("ADDR").expect("undefined ADDR");

@@ -17,6 +17,102 @@ enum RepositoryError {
     NotFound(i32),
 }
 
+#[derive(Debug, Clone)]
+pub struct RepositoryForDb {
+    pool: sqlx::PgPool,
+}
+
+impl RepositoryForDb {
+    pub fn new(pool: sqlx::PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl ArticleRepository for RepositoryForDb {
+    async fn create(&self, payload: NewArticle) -> anyhow::Result<Article> {
+        let article = sqlx::query_as::<_, Article>(
+            r#"
+            INSERT INTO articles (title, body, status)
+            VALUES ($1, $2, $3)
+            RETURNING *;
+            "#,
+        )
+        .bind(payload.title)
+        .bind(payload.body)
+        .bind(payload.status)
+        .fetch_one(&self.pool)
+        .await?;
+
+        dbg!(&article);
+
+        Ok(article)
+    }
+
+    async fn find(&self, id: i32) -> anyhow::Result<Article> {
+        let article = sqlx::query_as::<_, Article>(
+            r#"
+            SELECT * FROM articles
+            WHERE id = $1;
+            "#,
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(article)
+    }
+
+    async fn all(&self) -> anyhow::Result<Vec<Article>> {
+        let articles = sqlx::query_as::<_, Article>(
+            r#"
+            SELECT * FROM articles;
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(articles)
+    }
+
+    async fn update(&self, id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
+        let pre_payload = self.find(id).await?;
+        let article = sqlx::query_as::<_, Article>(
+            r#"
+            UPDATE articles set title = $1, body = $2, status = $3
+            WHERE id = $4
+            RETURNING *;
+            "#,
+        )
+        .bind(payload.title.unwrap_or(pre_payload.title))
+        .bind(payload.body.unwrap_or(pre_payload.body))
+        .bind(payload.status.unwrap_or(pre_payload.status))
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(article)
+    }
+
+    async fn delete(&self, id: i32) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"
+            DELETE FROM articles
+            WHERE id = $1;
+            "#,
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound(id),
+            e => RepositoryError::Unexpected(e.to_string()),
+        })?;
+
+        Ok(())
+    }
+}
+
 type Articles = HashMap<i32, Article>;
 
 #[derive(Debug, Clone)]
