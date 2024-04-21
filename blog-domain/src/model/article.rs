@@ -4,7 +4,7 @@ use sqlx::{
     FromRow,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "article_status", rename_all = "lowercase")]
 pub enum ArticleStatus {
     Draft,
@@ -12,7 +12,7 @@ pub enum ArticleStatus {
     Deleted,
 }
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, PartialEq)]
 pub struct Article {
     pub id: i32,
     pub title: String,
@@ -23,14 +23,14 @@ pub struct Article {
     // pub user_id: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct NewArticle {
     pub title: String,
     pub body: String,
     pub status: ArticleStatus,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct UpdateArticle {
     pub title: Option<String>,
     pub body: Option<String>,

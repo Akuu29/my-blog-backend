@@ -3,11 +3,6 @@ use blog_domain::{
     model::article::{Article, NewArticle, UpdateArticle},
     repository::article::ArticleRepository,
 };
-use chrono::Local;
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -65,7 +60,8 @@ impl ArticleRepository for RepositoryForDb {
     async fn all(&self) -> anyhow::Result<Vec<Article>> {
         let articles = sqlx::query_as::<_, Article>(
             r#"
-            SELECT * FROM articles;
+            SELECT * FROM articles
+            ORDER BY id DESC;
             "#,
         )
         .fetch_all(&self.pool)
@@ -112,89 +108,211 @@ impl ArticleRepository for RepositoryForDb {
     }
 }
 
-type Articles = HashMap<i32, Article>;
+#[cfg(test)]
+#[cfg(feature = "database-test")]
+mod test {
+    use super::*;
+    use blog_domain::model::article::ArticleStatus;
+    use dotenv::dotenv;
+    use sqlx::PgPool;
 
-#[derive(Debug, Clone)]
-pub struct RepositoryForMemory {
-    store: Arc<RwLock<Articles>>,
+    #[tokio::test]
+    async fn test_repository_for_db() {
+        dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL").expect("undefined DATABASE_URL");
+        let pool = PgPool::connect(&database_url).await.expect(&format!(
+            "failed to connect to database, url is {}",
+            database_url
+        ));
+        let repository = RepositoryForDb::new(pool);
+        let payload = NewArticle {
+            title: "title".to_string(),
+            body: "body".to_string(),
+            status: ArticleStatus::Draft,
+        };
+
+        // create
+        let article = repository.create(payload.clone()).await.unwrap();
+        assert_eq!(article.title, payload.title);
+        assert_eq!(article.body, payload.body);
+        assert_eq!(article.status, payload.status);
+
+        // find
+        let article = repository.find(article.id).await.unwrap();
+        assert_eq!(article.title, payload.title);
+        assert_eq!(article.body, payload.body);
+        assert_eq!(article.status, payload.status);
+
+        // all
+        let articles = repository.all().await.unwrap();
+        assert_eq!(&article, articles.first().unwrap());
+
+        // update
+        let payload = UpdateArticle {
+            title: Some("new title".to_string()),
+            body: Some("new body".to_string()),
+            status: Some(ArticleStatus::Published),
+        };
+        let article = repository
+            .update(article.id, payload.clone())
+            .await
+            .unwrap();
+        assert_eq!(article.title, payload.title.unwrap());
+        assert_eq!(article.body, payload.body.unwrap());
+        assert_eq!(article.status, payload.status.unwrap());
+
+        // delete
+        repository.delete(article.id).await.unwrap();
+        let _ = repository.all().await.unwrap();
+        let res = repository.find(article.id).await;
+        assert!(res.is_err());
+    }
 }
 
-impl RepositoryForMemory {
-    pub fn new() -> Self {
-        Self {
-            store: Arc::default(),
+#[cfg(test)]
+pub mod test_util {
+    use super::*;
+    use chrono::Local;
+    use std::{
+        collections::HashMap,
+        sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    };
+
+    type Articles = HashMap<i32, Article>;
+
+    #[derive(Debug, Clone)]
+    pub struct RepositoryForMemory {
+        store: Arc<RwLock<Articles>>,
+    }
+
+    impl RepositoryForMemory {
+        pub fn new() -> Self {
+            Self {
+                store: Arc::default(),
+            }
+        }
+
+        fn write_store_ref(&self) -> RwLockWriteGuard<Articles> {
+            self.store.write().unwrap()
+        }
+
+        fn read_store_ref(&self) -> RwLockReadGuard<Articles> {
+            self.store.read().unwrap()
         }
     }
 
-    fn write_store_ref(&self) -> RwLockWriteGuard<Articles> {
-        self.store.write().unwrap()
+    #[async_trait]
+    impl ArticleRepository for RepositoryForMemory {
+        async fn create(&self, payload: NewArticle) -> anyhow::Result<Article> {
+            let mut store = self.write_store_ref();
+            let id = (store.len() + 1) as i32;
+            let article = Article {
+                id,
+                title: payload.title,
+                body: payload.body,
+                status: payload.status,
+                created_at: Local::now(),
+                updated_at: Local::now(),
+            };
+
+            store.insert(id, article.clone());
+            Ok(article)
+        }
+
+        async fn find(&self, id: i32) -> anyhow::Result<Article> {
+            let store = self.read_store_ref();
+            let article = store
+                .get(&id)
+                .map(|article| article.clone())
+                .ok_or(RepositoryError::NotFound(id))?;
+
+            Ok(article)
+        }
+
+        async fn all(&self) -> anyhow::Result<Vec<Article>> {
+            let store = self.read_store_ref();
+
+            Ok(Vec::from_iter(
+                store.values().map(|article| article.clone()),
+            ))
+        }
+
+        async fn update(&self, id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
+            let mut store = self.write_store_ref();
+            let article = store.get(&id).unwrap();
+            let title = payload.title.unwrap_or(article.title.clone());
+            let body = payload.body.unwrap_or(article.body.clone());
+            let status = payload.status.unwrap_or(article.status.clone());
+            let created_at = article.created_at.clone();
+            let article = Article {
+                id,
+                title,
+                body,
+                status,
+                created_at,
+                updated_at: Local::now(),
+            };
+
+            store.insert(id, article.clone());
+            Ok(article)
+        }
+
+        async fn delete(&self, id: i32) -> anyhow::Result<()> {
+            let mut store = self.write_store_ref();
+
+            store.remove(&id).unwrap();
+            Ok(())
+        }
     }
 
-    fn read_store_ref(&self) -> RwLockReadGuard<Articles> {
-        self.store.read().unwrap()
-    }
-}
+    #[cfg(test)]
+    mod test {
+        use super::*;
+        use blog_domain::model::article::ArticleStatus;
 
-#[async_trait]
-impl ArticleRepository for RepositoryForMemory {
-    async fn create(&self, payload: NewArticle) -> anyhow::Result<Article> {
-        let mut store = self.write_store_ref();
-        let id = (store.len() + 1) as i32;
-        let article = Article {
-            id,
-            title: payload.title,
-            body: payload.body,
-            status: payload.status,
-            created_at: Local::now(),
-            updated_at: Local::now(),
-        };
+        #[tokio::test]
+        async fn test_repository_for_memory() {
+            let repository = RepositoryForMemory::new();
+            let payload = NewArticle {
+                title: "title".to_string(),
+                body: "body".to_string(),
+                status: ArticleStatus::Draft,
+            };
 
-        store.insert(id, article.clone());
-        Ok(article)
-    }
+            // create
+            let article = repository.create(payload.clone()).await.unwrap();
+            assert_eq!(article.title, payload.title);
+            assert_eq!(article.body, payload.body);
+            assert_eq!(article.status, payload.status);
 
-    async fn find(&self, id: i32) -> anyhow::Result<Article> {
-        let store = self.read_store_ref();
-        let article = store
-            .get(&id)
-            .map(|article| article.clone())
-            .ok_or(RepositoryError::NotFound(id))?;
+            // find
+            let article = repository.find(article.id).await.unwrap();
+            assert_eq!(article.title, payload.title);
+            assert_eq!(article.body, payload.body);
+            assert_eq!(article.status, payload.status);
 
-        Ok(article)
-    }
+            // all
+            let articles = repository.all().await.unwrap();
+            assert_eq!(articles.len(), 1);
 
-    async fn all(&self) -> anyhow::Result<Vec<Article>> {
-        let store = self.read_store_ref();
+            // update
+            let payload = UpdateArticle {
+                title: Some("new title".to_string()),
+                body: Some("new body".to_string()),
+                status: Some(ArticleStatus::Published),
+            };
+            let article = repository
+                .update(article.id, payload.clone())
+                .await
+                .unwrap();
+            assert_eq!(article.title, payload.title.unwrap());
+            assert_eq!(article.body, payload.body.unwrap());
+            assert_eq!(article.status, payload.status.unwrap());
 
-        Ok(Vec::from_iter(
-            store.values().map(|article| article.clone()),
-        ))
-    }
-
-    async fn update(&self, id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
-        let mut store = self.write_store_ref();
-        let article = store.get(&id).unwrap();
-        let title = payload.title.unwrap_or(article.title.clone());
-        let body = payload.body.unwrap_or(article.body.clone());
-        let status = payload.status.unwrap_or(article.status.clone());
-        let created_at = article.created_at.clone();
-        let article = Article {
-            id,
-            title,
-            body,
-            status,
-            created_at,
-            updated_at: Local::now(),
-        };
-
-        store.insert(id, article.clone());
-        Ok(article)
-    }
-
-    async fn delete(&self, id: i32) -> anyhow::Result<()> {
-        let mut store = self.write_store_ref();
-
-        store.remove(&id).unwrap();
-        Ok(())
+            // delete
+            repository.delete(article.id).await.unwrap();
+            let articles = repository.all().await.unwrap();
+            assert_eq!(articles.len(), 0);
+        }
     }
 }

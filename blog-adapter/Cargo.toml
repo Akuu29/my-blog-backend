@@ -12,3 +12,9 @@ blog-domain.workspace = true
 sqlx.workspace = true
 thiserror = "1.0.58"
 chrono = { version = "0.4.38", features = ["serde"] }
+tokio = "1.37.0"
+dotenv.workspace = true
+
+[features]
+default = ["database-test"]
+database-test = []
