@@ -3,6 +3,7 @@ use blog_domain::{
     model::article::{Article, NewArticle, UpdateArticle},
     repository::article::ArticleRepository,
 };
+use chrono::Local;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -44,8 +45,6 @@ impl ArticleRepository for RepositoryForDb {
         .fetch_one(&self.pool)
         .await?;
 
-        dbg!(&article);
-
         Ok(article)
     }
 
@@ -79,7 +78,7 @@ impl ArticleRepository for RepositoryForDb {
         let pre_payload = self.find(id).await?;
         let article = sqlx::query_as::<_, Article>(
             r#"
-            UPDATE articles set title = $1, body = $2, status = $3
+            UPDATE articles set title = $1, body = $2, status = $3, updated_at = now()
             WHERE id = $4
             RETURNING *;
             "#,
@@ -146,6 +145,8 @@ impl ArticleRepository for RepositoryForMemory {
             title: payload.title,
             body: payload.body,
             status: payload.status,
+            created_at: Local::now(),
+            updated_at: Local::now(),
         };
 
         store.insert(id, article.clone());
@@ -176,11 +177,14 @@ impl ArticleRepository for RepositoryForMemory {
         let title = payload.title.unwrap_or(article.title.clone());
         let body = payload.body.unwrap_or(article.body.clone());
         let status = payload.status.unwrap_or(article.status.clone());
+        let created_at = article.created_at.clone();
         let article = Article {
             id,
             title,
             body,
             status,
+            created_at,
+            updated_at: Local::now(),
         };
 
         store.insert(id, article.clone());

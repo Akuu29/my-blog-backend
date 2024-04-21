@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{
+    types::chrono::{DateTime, Local},
+    FromRow,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "article_status", rename_all = "lowercase")]
@@ -15,6 +18,8 @@ pub struct Article {
     pub title: String,
     pub body: String,
     pub status: ArticleStatus,
+    pub created_at: DateTime<Local>,
+    pub updated_at: DateTime<Local>,
     // pub user_id: i32,
 }
 
