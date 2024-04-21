@@ -8,5 +8,6 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait = "0.1.79"
-serde = { version = "1.0.197", features = ["derive"] }
+serde.workspace = true
 sqlx.workspace = true
+validator.workspace = true

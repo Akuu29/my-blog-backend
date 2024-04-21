@@ -1,3 +1,4 @@
+use crate::handler::ValidatedJson;
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
@@ -13,7 +14,7 @@ use std::sync::Arc;
 
 pub async fn create_article<T: ArticleRepository>(
     Extension(article_usecase): Extension<Arc<ArticleUsecase<T>>>,
-    Json(payload): Json<NewArticle>,
+    ValidatedJson(payload): ValidatedJson<NewArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let article = article_usecase
         .create(payload)
@@ -49,7 +50,7 @@ pub async fn all_articles<T: ArticleRepository>(
 pub async fn update_article<T: ArticleRepository>(
     Extension(article_usecase): Extension<Arc<ArticleUsecase<T>>>,
     Path(id): Path<i32>,
-    Json(payload): Json<UpdateArticle>,
+    ValidatedJson(payload): ValidatedJson<UpdateArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let article = article_usecase
         .update(id, payload)
