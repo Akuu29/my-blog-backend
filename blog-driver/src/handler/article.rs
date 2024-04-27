@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use blog_app::usecase::article::ArticleUsecase;
+use blog_app::usecase::article::ArticleUseCase;
 use blog_domain::{
     model::article::{NewArticle, UpdateArticle},
     repository::article::ArticleRepository,
@@ -13,7 +13,7 @@ use blog_domain::{
 use std::sync::Arc;
 
 pub async fn create_article<T: ArticleRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUsecase<T>>>,
+    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
     ValidatedJson(payload): ValidatedJson<NewArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let article = article_usecase
@@ -25,7 +25,7 @@ pub async fn create_article<T: ArticleRepository>(
 }
 
 pub async fn find_article<T: ArticleRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUsecase<T>>>,
+    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let article = article_usecase
@@ -37,7 +37,7 @@ pub async fn find_article<T: ArticleRepository>(
 }
 
 pub async fn all_articles<T: ArticleRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUsecase<T>>>,
+    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let articles = article_usecase
         .all()
@@ -48,7 +48,7 @@ pub async fn all_articles<T: ArticleRepository>(
 }
 
 pub async fn update_article<T: ArticleRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUsecase<T>>>,
+    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
     Path(id): Path<i32>,
     ValidatedJson(payload): ValidatedJson<UpdateArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
@@ -61,7 +61,7 @@ pub async fn update_article<T: ArticleRepository>(
 }
 
 pub async fn delete_article<T: ArticleRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUsecase<T>>>,
+    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
     Path(id): Path<i32>,
 ) -> StatusCode {
     article_usecase

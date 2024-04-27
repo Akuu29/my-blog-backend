@@ -3,7 +3,7 @@ use sqlx::{
     types::chrono::{DateTime, Local},
     FromRow,
 };
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "article_status", rename_all = "lowercase")]

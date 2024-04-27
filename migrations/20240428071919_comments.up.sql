@@ -1,0 +1,8 @@
+-- Add up migration script here
+CREATE TABLE comments (
+    id SERIAL PRIMARY KEY,
+    article_id INT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

@@ -3,11 +3,11 @@ use blog_domain::{
     repository::article::ArticleRepository,
 };
 
-pub struct ArticleUsecase<T: ArticleRepository> {
+pub struct ArticleUseCase<T: ArticleRepository> {
     repository: T,
 }
 
-impl<T: ArticleRepository> ArticleUsecase<T> {
+impl<T: ArticleRepository> ArticleUseCase<T> {
     pub fn new(repository: T) -> Self {
         Self { repository }
     }

@@ -1,4 +1,5 @@
 pub mod article;
+pub mod comment;
 
 use axum::{
     async_trait,

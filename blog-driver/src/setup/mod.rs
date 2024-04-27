@@ -1,10 +1,14 @@
-use crate::handler::article::{
-    all_articles, create_article, delete_article, find_article, update_article,
+use crate::handler::{
+    article::{all_articles, create_article, delete_article, find_article, update_article},
+    comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
 };
-use axum::{routing::get, Extension, Router};
-use blog_adapter::repository::RepositoryForDb;
-use blog_app::usecase::article::ArticleUsecase;
-use blog_domain::repository::article::ArticleRepository;
+use axum::{
+    routing::{get, post},
+    Extension, Router,
+};
+use blog_adapter::repository::{article::ArticleRepositoryForDb, comment::CommentRepositoryForDb};
+use blog_app::usecase::{article::ArticleUseCase, comment::CommentUseCase};
+use blog_domain::repository::{article::ArticleRepository, comment::CommentRepository};
 use sqlx::PgPool;
 use std::{env, sync::Arc};
 
@@ -21,9 +25,9 @@ pub async fn create_server() {
         database_url
     ));
 
-    let repository = RepositoryForDb::new(pool);
-    let usecase = ArticleUsecase::new(repository);
-    let router = create_router(usecase);
+    let article_use_case = ArticleUseCase::new(ArticleRepositoryForDb::new(pool.clone()));
+    let comment_use_case = CommentUseCase::new(CommentRepositoryForDb::new(pool.clone()));
+    let router = create_router(article_use_case, comment_use_case);
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
         .await
@@ -34,7 +38,10 @@ pub async fn create_server() {
     axum::serve(lister, router).await.unwrap();
 }
 
-fn create_router<T: ArticleRepository>(usecase: ArticleUsecase<T>) -> Router {
+fn create_router<T: ArticleRepository, U: CommentRepository>(
+    article_use_case: ArticleUseCase<T>,
+    comment_use_case: CommentUseCase<U>,
+) -> Router {
     Router::new()
         .route("/", get(root))
         .route(
@@ -47,7 +54,19 @@ fn create_router<T: ArticleRepository>(usecase: ArticleUsecase<T>) -> Router {
                 .patch(update_article::<T>)
                 .delete(delete_article::<T>),
         )
-        .layer(Extension(Arc::new(usecase)))
+        .route("/comments", post(create_comment::<U>))
+        .route(
+            "/comments/:id",
+            get(find_comment::<U>)
+                .patch(update_comment::<U>)
+                .delete(delete_comment::<U>),
+        )
+        .route(
+            "/comments/related/:article_id",
+            get(find_by_article_id::<U>),
+        )
+        .layer(Extension(Arc::new(article_use_case)))
+        .layer(Extension(Arc::new(comment_use_case)))
 }
 
 async fn root() -> &'static str {
