@@ -109,7 +109,7 @@ mod test {
     use sqlx::PgPool;
 
     #[tokio::test]
-    async fn test_repository_for_db() {
+    async fn test_article_repository_for_db() {
         dotenv().ok();
         let database_url = std::env::var("DATABASE_URL").expect("undefined DATABASE_URL");
         let pool = PgPool::connect(&database_url).await.expect(&format!(
@@ -263,7 +263,7 @@ pub mod test_util {
         use blog_domain::model::article::ArticleStatus;
 
         #[tokio::test]
-        async fn test_repository_for_memory() {
+        async fn test_article_repository_for_memory() {
             let repository = RepositoryForMemory::new();
             let payload = NewArticle {
                 title: "title".to_string(),

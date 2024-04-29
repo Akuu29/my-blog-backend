@@ -5,7 +5,7 @@ use sqlx::{
 };
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow, PartialEq)]
 pub struct Comment {
     pub id: i32,
     pub article_id: i32,
