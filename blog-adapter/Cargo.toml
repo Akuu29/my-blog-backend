@@ -10,10 +10,12 @@ anyhow.workspace = true
 async-trait = "0.1.79"
 blog-domain.workspace = true
 sqlx.workspace = true
+serde.workspace = true
 thiserror = "1.0.58"
 chrono = { version = "0.4.38", features = ["serde"] }
 tokio = "1.37.0"
 dotenv.workspace = true
+reqwest.workspace = true
 
 [features]
 default = ["database-test"]

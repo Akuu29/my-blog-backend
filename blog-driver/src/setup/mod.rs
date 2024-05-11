@@ -1,12 +1,17 @@
 use crate::handler::{
     article::{all_articles, create_article, delete_article, find_article, update_article},
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
+    user::{signin, signup},
 };
 use axum::{
     routing::{get, post},
     Extension, Router,
 };
-use blog_adapter::repository::{article::ArticleRepositoryForDb, comment::CommentRepositoryForDb};
+use blog_adapter::repository::{
+    article::ArticleRepositoryForDb,
+    comment::CommentRepositoryForDb,
+    user::{UserRepository, UserRepositoryForFirebase},
+};
 use blog_app::usecase::{article::ArticleUseCase, comment::CommentUseCase};
 use blog_domain::repository::{article::ArticleRepository, comment::CommentRepository};
 use sqlx::PgPool;
@@ -27,7 +32,12 @@ pub async fn create_server() {
 
     let article_use_case = ArticleUseCase::new(ArticleRepositoryForDb::new(pool.clone()));
     let comment_use_case = CommentUseCase::new(CommentRepositoryForDb::new(pool.clone()));
-    let router = create_router(article_use_case, comment_use_case);
+
+    let client = reqwest::Client::new();
+    let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
+    let user_repository = UserRepositoryForFirebase::new(client, api_key);
+
+    let router = create_router(article_use_case, comment_use_case, user_repository);
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
         .await
@@ -38,9 +48,10 @@ pub async fn create_server() {
     axum::serve(lister, router).await.unwrap();
 }
 
-fn create_router<T: ArticleRepository, U: CommentRepository>(
+fn create_router<T: ArticleRepository, U: CommentRepository, S: UserRepository>(
     article_use_case: ArticleUseCase<T>,
     comment_use_case: CommentUseCase<U>,
+    user_repository: S,
 ) -> Router {
     Router::new()
         .route("/", get(root))
@@ -65,8 +76,11 @@ fn create_router<T: ArticleRepository, U: CommentRepository>(
             "/comments/related/:article_id",
             get(find_by_article_id::<U>),
         )
+        .route("/users/signup", post(signup::<S>))
+        .route("/users/signin", post(signin::<S>))
         .layer(Extension(Arc::new(article_use_case)))
         .layer(Extension(Arc::new(comment_use_case)))
+        .layer(Extension(Arc::new(user_repository)))
 }
 
 async fn root() -> &'static str {
