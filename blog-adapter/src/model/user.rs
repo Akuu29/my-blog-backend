@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct User {
@@ -14,17 +15,21 @@ pub struct User {
     pub local_id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SignupUser {
+    #[validate(email)]
     pub email: String,
+    #[validate(length(min = 6, message = "password length must be 6 or more"))]
     pub password: String,
     #[serde(rename = "returnSecureToken")]
     pub return_secure_token: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SigninUser {
+    #[validate(email)]
     pub email: String,
+    #[validate(length(min = 6, message = "password length must be 6 or more"))]
     pub password: String,
     #[serde(rename = "returnSecureToken")]
     pub return_secure_token: bool,

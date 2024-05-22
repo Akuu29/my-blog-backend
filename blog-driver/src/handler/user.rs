@@ -1,3 +1,4 @@
+use crate::handler::ValidatedJson;
 use axum::{
     extract::{Extension, Json},
     http::StatusCode,
@@ -11,7 +12,7 @@ use std::sync::Arc;
 
 pub async fn signup<T: UserRepository>(
     Extension(user_repository): Extension<Arc<T>>,
-    Json(payload): Json<SignupUser>,
+    ValidatedJson(payload): ValidatedJson<SignupUser>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let user = user_repository
         .signup(payload)
@@ -23,7 +24,7 @@ pub async fn signup<T: UserRepository>(
 
 pub async fn signin<T: UserRepository>(
     Extension(user_repository): Extension<Arc<T>>,
-    Json(payload): Json<SigninUser>,
+    ValidatedJson(payload): ValidatedJson<SigninUser>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let user = user_repository
         .signin(payload)

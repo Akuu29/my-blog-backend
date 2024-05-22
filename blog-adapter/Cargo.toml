@@ -16,6 +16,7 @@ chrono = { version = "0.4.38", features = ["serde"] }
 tokio = "1.37.0"
 dotenv.workspace = true
 reqwest.workspace = true
+validator.workspace = true
 
 [features]
 default = ["database-test"]
