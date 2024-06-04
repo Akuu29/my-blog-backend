@@ -10,4 +10,4 @@ anyhow.workspace = true
 serde.workspace = true
 sqlx.workspace = true
 validator.workspace = true
-async-trait = "0.1.79"
+async-trait.workspace = true

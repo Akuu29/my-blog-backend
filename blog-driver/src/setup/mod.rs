@@ -8,11 +8,13 @@ use axum::{
     Extension, Router,
 };
 use blog_adapter::repository::{
-    article::ArticleRepositoryForDb,
-    comment::CommentRepositoryForDb,
-    user::{UserRepository, UserRepositoryForFirebase},
+    article::ArticleRepositoryForDb, comment::CommentRepositoryForDb,
+    user::UserRepositoryForFirebase,
 };
-use blog_app::usecase::{article::ArticleUseCase, comment::CommentUseCase};
+use blog_app::{
+    repository::user::UserRepository,
+    usecase::{article::ArticleUseCase, comment::CommentUseCase, user::UserUseCase},
+};
 use blog_domain::repository::{article::ArticleRepository, comment::CommentRepository};
 use sqlx::PgPool;
 use std::{env, sync::Arc};
@@ -35,9 +37,9 @@ pub async fn create_server() {
 
     let client = reqwest::Client::new();
     let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
-    let user_repository = UserRepositoryForFirebase::new(client, api_key);
+    let user_use_case = UserUseCase::new(UserRepositoryForFirebase::new(client, api_key));
 
-    let router = create_router(article_use_case, comment_use_case, user_repository);
+    let router = create_router(article_use_case, comment_use_case, user_use_case);
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
         .await
@@ -51,7 +53,7 @@ pub async fn create_server() {
 fn create_router<T: ArticleRepository, U: CommentRepository, S: UserRepository>(
     article_use_case: ArticleUseCase<T>,
     comment_use_case: CommentUseCase<U>,
-    user_repository: S,
+    user_use_case: UserUseCase<S>,
 ) -> Router {
     Router::new()
         .route("/", get(root))
@@ -80,7 +82,7 @@ fn create_router<T: ArticleRepository, U: CommentRepository, S: UserRepository>(
         .route("/users/signin", post(signin::<S>))
         .layer(Extension(Arc::new(article_use_case)))
         .layer(Extension(Arc::new(comment_use_case)))
-        .layer(Extension(Arc::new(user_repository)))
+        .layer(Extension(Arc::new(user_use_case)))
 }
 
 async fn root() -> &'static str {

@@ -9,6 +9,7 @@ edition.workspace = true
 anyhow.workspace = true
 async-trait = "0.1.79"
 blog-domain.workspace = true
+blog-app.workspace = true
 sqlx.workspace = true
 serde.workspace = true
 thiserror = "1.0.58"

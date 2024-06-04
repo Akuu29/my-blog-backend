@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use blog_adapter::{
+use blog_app::{
     model::user::{SigninUser, SignupUser},
     repository::user::UserRepository,
 };

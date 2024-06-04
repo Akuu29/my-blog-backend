@@ -8,3 +8,6 @@ edition.workspace = true
 [dependencies]
 blog-domain.workspace = true
 anyhow.workspace = true
+serde.workspace = true
+validator.workspace = true
+async-trait.workspace = true
