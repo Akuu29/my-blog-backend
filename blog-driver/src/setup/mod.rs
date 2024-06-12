@@ -4,6 +4,7 @@ use crate::handler::{
     user::{signin, signup},
 };
 use axum::{
+    http::Method,
     routing::{get, post},
     Extension, Router,
 };
@@ -18,6 +19,7 @@ use blog_app::{
 use blog_domain::repository::{article::ArticleRepository, comment::CommentRepository};
 use sqlx::PgPool;
 use std::{env, sync::Arc};
+use tower_http::cors::{Any, CorsLayer};
 
 pub async fn create_server() {
     let log_level = env::var("RUST_LOG").unwrap_or("info".to_string());
@@ -32,6 +34,10 @@ pub async fn create_server() {
         database_url
     ));
 
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_origin(Any);
+
     let article_use_case = ArticleUseCase::new(ArticleRepositoryForDb::new(pool.clone()));
     let comment_use_case = CommentUseCase::new(CommentRepositoryForDb::new(pool.clone()));
 
@@ -39,7 +45,7 @@ pub async fn create_server() {
     let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
     let user_use_case = UserUseCase::new(UserRepositoryForFirebase::new(client, api_key));
 
-    let router = create_router(article_use_case, comment_use_case, user_use_case);
+    let router = create_router(cors, article_use_case, comment_use_case, user_use_case);
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
         .await
@@ -51,6 +57,7 @@ pub async fn create_server() {
 }
 
 fn create_router<T: ArticleRepository, U: CommentRepository, S: UserRepository>(
+    cors_layer: CorsLayer,
     article_use_case: ArticleUseCase<T>,
     comment_use_case: CommentUseCase<U>,
     user_use_case: UserUseCase<S>,
@@ -80,6 +87,7 @@ fn create_router<T: ArticleRepository, U: CommentRepository, S: UserRepository>(
         )
         .route("/users/signup", post(signup::<S>))
         .route("/users/signin", post(signin::<S>))
+        .layer(cors_layer)
         .layer(Extension(Arc::new(article_use_case)))
         .layer(Extension(Arc::new(comment_use_case)))
         .layer(Extension(Arc::new(user_use_case)))
