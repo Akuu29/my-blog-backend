@@ -1,7 +1,7 @@
 use crate::handler::{
     article::{all_articles, create_article, delete_article, find_article, update_article},
+    auth::{signin, signup},
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
-    user::{signin, signup},
 };
 use axum::{
     http::Method,
@@ -9,12 +9,14 @@ use axum::{
     Extension, Router,
 };
 use blog_adapter::repository::{
-    article::ArticleRepositoryForDb, comment::CommentRepositoryForDb,
-    user::UserRepositoryForFirebase,
+    article::ArticleRepositoryForDb, auth::AuthRepositoryForFirebase,
+    comment::CommentRepositoryForDb, user::UserRepositoryForFirebase,
 };
 use blog_app::{
-    repository::user::UserRepository,
-    usecase::{article::ArticleUseCase, comment::CommentUseCase, user::UserUseCase},
+    repository::{auth::AuthRepository, user::UserRepository},
+    usecase::{
+        article::ArticleUseCase, auth::AuthUseCase, comment::CommentUseCase, user::UserUseCase,
+    },
 };
 use blog_domain::repository::{article::ArticleRepository, comment::CommentRepository};
 use sqlx::PgPool;
@@ -43,9 +45,22 @@ pub async fn create_server() {
 
     let client = reqwest::Client::new();
     let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
-    let user_use_case = UserUseCase::new(UserRepositoryForFirebase::new(client, api_key));
+    let user_use_case = UserUseCase::new(UserRepositoryForFirebase::new(
+        client.clone(),
+        api_key.clone(),
+    ));
+    let auth_use_case = AuthUseCase::new(AuthRepositoryForFirebase::new(
+        client.clone(),
+        api_key.clone(),
+    ));
 
-    let router = create_router(cors, article_use_case, comment_use_case, user_use_case);
+    let router = create_router(
+        cors,
+        article_use_case,
+        comment_use_case,
+        user_use_case,
+        auth_use_case,
+    );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
         .await
@@ -56,11 +71,17 @@ pub async fn create_server() {
     axum::serve(lister, router).await.unwrap();
 }
 
-fn create_router<T: ArticleRepository, U: CommentRepository, S: UserRepository>(
+fn create_router<
+    T: ArticleRepository,
+    U: CommentRepository,
+    S: UserRepository,
+    V: AuthRepository,
+>(
     cors_layer: CorsLayer,
     article_use_case: ArticleUseCase<T>,
     comment_use_case: CommentUseCase<U>,
     user_use_case: UserUseCase<S>,
+    auth_use_case: AuthUseCase<V>,
 ) -> Router {
     Router::new()
         .route("/", get(root))
@@ -85,12 +106,13 @@ fn create_router<T: ArticleRepository, U: CommentRepository, S: UserRepository>(
             "/comments/related/:article_id",
             get(find_by_article_id::<U>),
         )
-        .route("/users/signup", post(signup::<S>))
-        .route("/users/signin", post(signin::<S>))
+        .route("/auth/signup", post(signup::<V>))
+        .route("/auth/signin", post(signin::<V>))
         .layer(cors_layer)
         .layer(Extension(Arc::new(article_use_case)))
         .layer(Extension(Arc::new(comment_use_case)))
         .layer(Extension(Arc::new(user_use_case)))
+        .layer(Extension(Arc::new(auth_use_case)))
 }
 
 async fn root() -> &'static str {
