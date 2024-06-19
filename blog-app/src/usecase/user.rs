@@ -1,7 +1,4 @@
-use crate::{
-    model::user::{SigninUser, SignupUser, User},
-    repository::user::UserRepository,
-};
+use crate::repository::user::UserRepository;
 
 pub struct UserUseCase<T: UserRepository> {
     repository: T,
@@ -12,11 +9,11 @@ impl<T: UserRepository> UserUseCase<T> {
         Self { repository }
     }
 
-    pub async fn signup(&self, payload: SignupUser) -> anyhow::Result<User> {
-        self.repository.signup(payload).await
+    pub async fn update(&self) -> anyhow::Result<()> {
+        self.repository.update().await
     }
 
-    pub async fn signin(&self, payload: SigninUser) -> anyhow::Result<User> {
-        self.repository.signin(payload).await
+    pub async fn delete(&self) -> anyhow::Result<()> {
+        self.repository.delete().await
     }
 }

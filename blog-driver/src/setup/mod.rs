@@ -2,10 +2,11 @@ use crate::handler::{
     article::{all_articles, create_article, delete_article, find_article, update_article},
     auth::{signin, signup},
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
+    user::{delete, update},
 };
 use axum::{
     http::Method,
-    routing::{get, post},
+    routing::{get, post, put},
     Extension, Router,
 };
 use blog_adapter::repository::{
@@ -108,6 +109,7 @@ fn create_router<
         )
         .route("/auth/signup", post(signup::<V>))
         .route("/auth/signin", post(signin::<V>))
+        .route("/users", put(update::<S>).delete(delete::<S>))
         .layer(cors_layer)
         .layer(Extension(Arc::new(article_use_case)))
         .layer(Extension(Arc::new(comment_use_case)))
