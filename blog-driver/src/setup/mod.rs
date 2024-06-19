@@ -36,11 +36,6 @@ pub async fn create_server() {
         "failed to connect to database, url is {}",
         database_url
     ));
-
-    let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST])
-        .allow_origin(Any);
-
     let article_use_case = ArticleUseCase::new(ArticleRepositoryForDb::new(pool.clone()));
     let comment_use_case = CommentUseCase::new(CommentRepositoryForDb::new(pool.clone()));
 
@@ -55,12 +50,16 @@ pub async fn create_server() {
         api_key.clone(),
     ));
 
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_origin(Any);
+
     let router = create_router(
         cors,
+        auth_use_case,
+        user_use_case,
         article_use_case,
         comment_use_case,
-        user_use_case,
-        auth_use_case,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
@@ -73,48 +72,54 @@ pub async fn create_server() {
 }
 
 fn create_router<
-    T: ArticleRepository,
-    U: CommentRepository,
-    S: UserRepository,
-    V: AuthRepository,
+    S: AuthRepository,
+    T: UserRepository,
+    U: ArticleRepository,
+    V: CommentRepository,
 >(
     cors_layer: CorsLayer,
-    article_use_case: ArticleUseCase<T>,
-    comment_use_case: CommentUseCase<U>,
-    user_use_case: UserUseCase<S>,
-    auth_use_case: AuthUseCase<V>,
+    auth_use_case: AuthUseCase<S>,
+    user_use_case: UserUseCase<T>,
+    article_use_case: ArticleUseCase<U>,
+    comment_use_case: CommentUseCase<V>,
 ) -> Router {
+    let auth_router = Router::new()
+        .route("/signup", post(signup::<S>))
+        .route("/signin", post(signin::<S>))
+        .layer(Extension(Arc::new(auth_use_case)));
+
+    let users_router = Router::new()
+        .route("/", put(update::<T>).delete(delete::<T>))
+        .layer(Extension(Arc::new(user_use_case)));
+
+    let articles_router = Router::new()
+        .route("/", get(all_articles::<U>).post(create_article::<U>))
+        .route(
+            "/:id",
+            get(find_article::<U>)
+                .patch(update_article::<U>)
+                .delete(delete_article::<U>),
+        )
+        .layer(Extension(Arc::new(article_use_case)));
+
+    let comments_router = Router::new()
+        .route("/", post(create_comment::<V>))
+        .route(
+            "/:id",
+            get(find_comment::<V>)
+                .patch(update_comment::<V>)
+                .delete(delete_comment::<V>),
+        )
+        .route("/related/:article_id", get(find_by_article_id::<V>))
+        .layer(Extension(Arc::new(comment_use_case)));
+
     Router::new()
         .route("/", get(root))
-        .route(
-            "/articles",
-            get(all_articles::<T>).post(create_article::<T>),
-        )
-        .route(
-            "/articles/:id",
-            get(find_article::<T>)
-                .patch(update_article::<T>)
-                .delete(delete_article::<T>),
-        )
-        .route("/comments", post(create_comment::<U>))
-        .route(
-            "/comments/:id",
-            get(find_comment::<U>)
-                .patch(update_comment::<U>)
-                .delete(delete_comment::<U>),
-        )
-        .route(
-            "/comments/related/:article_id",
-            get(find_by_article_id::<U>),
-        )
-        .route("/auth/signup", post(signup::<V>))
-        .route("/auth/signin", post(signin::<V>))
-        .route("/users", put(update::<S>).delete(delete::<S>))
+        .nest("/auth", auth_router)
+        .nest("/users", users_router)
+        .nest("/articles", articles_router)
+        .nest("/comments", comments_router)
         .layer(cors_layer)
-        .layer(Extension(Arc::new(article_use_case)))
-        .layer(Extension(Arc::new(comment_use_case)))
-        .layer(Extension(Arc::new(user_use_case)))
-        .layer(Extension(Arc::new(auth_use_case)))
 }
 
 async fn root() -> &'static str {
