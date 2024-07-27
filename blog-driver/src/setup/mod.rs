@@ -102,12 +102,12 @@ fn create_router<
         .layer(Extension(Arc::new(user_use_case)));
 
     let articles_router = Router::new()
-        .route("/", get(all_articles::<V>).post(create_article::<V>))
+        .route("/", get(all_articles::<V>).post(create_article::<V, T>))
         .route(
             "/:id",
             get(find_article::<V>)
-                .patch(update_article::<V>)
-                .delete(delete_article::<V>),
+                .patch(update_article::<V, T>)
+                .delete(delete_article::<V, T>),
         )
         .layer(Extension(Arc::new(article_use_case)));
 
@@ -129,6 +129,7 @@ fn create_router<
         .nest("/users", users_router)
         .nest("/articles", articles_router)
         .nest("/comments", comments_router)
+        .layer(Extension(Arc::new(token_use_case)))
         .layer(cors_layer)
 }
 

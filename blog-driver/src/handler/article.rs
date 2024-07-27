@@ -5,17 +5,35 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use blog_app::usecase::article::ArticleUseCase;
+use axum_extra::{
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
+};
+use blog_app::{
+    repository::token::TokenRepository,
+    usecase::{article::ArticleUseCase, token::TokenUseCase},
+};
 use blog_domain::{
     model::article::{NewArticle, UpdateArticle},
     repository::article::ArticleRepository,
 };
 use std::sync::Arc;
 
-pub async fn create_article<T: ArticleRepository>(
+pub async fn create_article<T: ArticleRepository, U: TokenRepository>(
     Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
+    Extension(token_usecase): Extension<Arc<TokenUseCase<U>>>,
+    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
     ValidatedJson(payload): ValidatedJson<NewArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    let access_token = bearer.token().to_string();
+    let _verified_token = token_usecase
+        .verify_access_token(&access_token)
+        .await
+        .map_err(|e| {
+            tracing::info!("failed to verify access token: {:?}", e);
+            StatusCode::UNAUTHORIZED
+        })?;
+
     let article = article_usecase
         .create(payload)
         .await
@@ -47,11 +65,22 @@ pub async fn all_articles<T: ArticleRepository>(
     Ok((StatusCode::OK, Json(articles)))
 }
 
-pub async fn update_article<T: ArticleRepository>(
+pub async fn update_article<T: ArticleRepository, U: TokenRepository>(
     Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
+    Extension(token_usecase): Extension<Arc<TokenUseCase<U>>>,
     Path(id): Path<i32>,
+    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
     ValidatedJson(payload): ValidatedJson<UpdateArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    let access_token = bearer.token().to_string();
+    let _verified_token = token_usecase
+        .verify_access_token(&access_token)
+        .await
+        .map_err(|e| {
+            tracing::info!("failed to verify access token: {:?}", e);
+            StatusCode::UNAUTHORIZED
+        })?;
+
     let article = article_usecase
         .update(id, payload)
         .await
@@ -60,15 +89,26 @@ pub async fn update_article<T: ArticleRepository>(
     Ok((StatusCode::OK, Json(article)))
 }
 
-pub async fn delete_article<T: ArticleRepository>(
+pub async fn delete_article<T: ArticleRepository, U: TokenRepository>(
     Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
+    Extension(token_usecase): Extension<Arc<TokenUseCase<U>>>,
+    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
     Path(id): Path<i32>,
-) -> StatusCode {
+) -> Result<impl IntoResponse, StatusCode> {
+    let access_token = bearer.token().to_string();
+    let _verified_token = token_usecase
+        .verify_access_token(&access_token)
+        .await
+        .map_err(|e| {
+            tracing::info!("failed to verify access token: {:?}", e);
+            StatusCode::UNAUTHORIZED
+        })?;
+
     article_usecase
         .delete(id)
         .await
         .map(|_| StatusCode::NO_CONTENT)
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
-    StatusCode::NO_CONTENT
+    Ok(StatusCode::NO_CONTENT)
 }
