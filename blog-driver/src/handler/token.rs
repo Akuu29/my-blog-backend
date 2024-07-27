@@ -18,7 +18,8 @@ pub async fn verify_id_token<T: TokenRepository>(
         .or(Err(StatusCode::BAD_REQUEST))?;
 
     let id_token = auth_header.replace("Bearer ", "");
-    let _ = token_use_case
+
+    let api_credentials = token_use_case
         .verify_id_token(&id_token)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
