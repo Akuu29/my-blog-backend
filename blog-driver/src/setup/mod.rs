@@ -2,6 +2,7 @@ use crate::handler::{
     article::{all_articles, create_article, delete_article, find_article, update_article},
     auth::{signin, signup},
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
+    token::verify_id_token,
     user::{delete, update},
 };
 use axum::{
@@ -11,12 +12,14 @@ use axum::{
 };
 use blog_adapter::repository::{
     article::ArticleRepositoryForDb, auth::AuthRepositoryForFirebase,
-    comment::CommentRepositoryForDb, user::UserRepositoryForFirebase,
+    comment::CommentRepositoryForDb, token::TokenRepositoryForFirebase,
+    user::UserRepositoryForFirebase,
 };
 use blog_app::{
-    repository::{auth::AuthRepository, user::UserRepository},
+    repository::{auth::AuthRepository, token::TokenRepository, user::UserRepository},
     usecase::{
-        article::ArticleUseCase, auth::AuthUseCase, comment::CommentUseCase, user::UserUseCase,
+        article::ArticleUseCase, auth::AuthUseCase, comment::CommentUseCase, token::TokenUseCase,
+        user::UserUseCase,
     },
 };
 use blog_domain::repository::{article::ArticleRepository, comment::CommentRepository};
@@ -49,6 +52,7 @@ pub async fn create_server() {
         client.clone(),
         api_key.clone(),
     ));
+    let token_use_case = TokenUseCase::new(TokenRepositoryForFirebase::new(client.clone()));
 
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
@@ -57,6 +61,7 @@ pub async fn create_server() {
     let router = create_router(
         cors,
         auth_use_case,
+        token_use_case,
         user_use_case,
         article_use_case,
         comment_use_case,
@@ -73,49 +78,54 @@ pub async fn create_server() {
 
 fn create_router<
     S: AuthRepository,
-    T: UserRepository,
-    U: ArticleRepository,
-    V: CommentRepository,
+    T: TokenRepository,
+    U: UserRepository,
+    V: ArticleRepository,
+    W: CommentRepository,
 >(
     cors_layer: CorsLayer,
     auth_use_case: AuthUseCase<S>,
-    user_use_case: UserUseCase<T>,
-    article_use_case: ArticleUseCase<U>,
-    comment_use_case: CommentUseCase<V>,
+    token_use_case: TokenUseCase<T>,
+    user_use_case: UserUseCase<U>,
+    article_use_case: ArticleUseCase<V>,
+    comment_use_case: CommentUseCase<W>,
 ) -> Router {
     let auth_router = Router::new()
         .route("/signup", post(signup::<S>))
         .route("/signin", post(signin::<S>))
         .layer(Extension(Arc::new(auth_use_case)));
 
+    let token_router = Router::new().route("/verify-id-token", get(verify_id_token::<T>));
+
     let users_router = Router::new()
-        .route("/", put(update::<T>).delete(delete::<T>))
+        .route("/", put(update::<U>).delete(delete::<U>))
         .layer(Extension(Arc::new(user_use_case)));
 
     let articles_router = Router::new()
-        .route("/", get(all_articles::<U>).post(create_article::<U>))
+        .route("/", get(all_articles::<V>).post(create_article::<V>))
         .route(
             "/:id",
-            get(find_article::<U>)
-                .patch(update_article::<U>)
-                .delete(delete_article::<U>),
+            get(find_article::<V>)
+                .patch(update_article::<V>)
+                .delete(delete_article::<V>),
         )
         .layer(Extension(Arc::new(article_use_case)));
 
     let comments_router = Router::new()
-        .route("/", post(create_comment::<V>))
+        .route("/", post(create_comment::<W>))
         .route(
             "/:id",
-            get(find_comment::<V>)
-                .patch(update_comment::<V>)
-                .delete(delete_comment::<V>),
+            get(find_comment::<W>)
+                .patch(update_comment::<W>)
+                .delete(delete_comment::<W>),
         )
-        .route("/related/:article_id", get(find_by_article_id::<V>))
+        .route("/related/:article_id", get(find_by_article_id::<W>))
         .layer(Extension(Arc::new(comment_use_case)));
 
     Router::new()
         .route("/", get(root))
         .nest("/auth", auth_router)
+        .nest("/token", token_router)
         .nest("/users", users_router)
         .nest("/articles", articles_router)
         .nest("/comments", comments_router)
