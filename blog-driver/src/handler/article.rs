@@ -13,9 +13,9 @@ use blog_app::{
     repository::token::TokenRepository,
     usecase::{article::ArticleUseCase, token::TokenUseCase},
 };
-use blog_domain::{
-    model::article::{NewArticle, UpdateArticle},
-    repository::article::ArticleRepository,
+use blog_domain::model::articles::{
+    article::{NewArticle, UpdateArticle},
+    i_article_repository::ArticleRepository,
 };
 use std::sync::Arc;
 

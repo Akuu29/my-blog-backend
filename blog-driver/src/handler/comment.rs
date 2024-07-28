@@ -6,9 +6,9 @@ use axum::{
     Json,
 };
 use blog_app::usecase::comment::CommentUseCase;
-use blog_domain::{
-    model::comment::{NewComment, UpdateComment},
-    repository::comment::CommentRepository,
+use blog_domain::model::comments::{
+    comment::{NewComment, UpdateComment},
+    i_comment_repository::CommentRepository,
 };
 use std::sync::Arc;
 

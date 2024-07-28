@@ -1,6 +1,6 @@
-use blog_domain::{
-    model::comment::{Comment, NewComment, UpdateComment},
-    repository::comment::CommentRepository,
+use blog_domain::model::comments::{
+    comment::{Comment, NewComment, UpdateComment},
+    i_comment_repository::CommentRepository,
 };
 
 pub struct CommentUseCase<T: CommentRepository> {

@@ -1,6 +1,6 @@
-use blog_domain::{
-    model::article::{Article, NewArticle, UpdateArticle},
-    repository::article::ArticleRepository,
+use blog_domain::model::articles::{
+    article::{Article, NewArticle, UpdateArticle},
+    i_article_repository::ArticleRepository,
 };
 
 pub struct ArticleUseCase<T: ArticleRepository> {

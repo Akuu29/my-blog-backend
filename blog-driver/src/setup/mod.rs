@@ -22,7 +22,10 @@ use blog_app::{
         user::UserUseCase,
     },
 };
-use blog_domain::repository::{article::ArticleRepository, comment::CommentRepository};
+use blog_domain::model::{
+    articles::i_article_repository::ArticleRepository,
+    comments::i_comment_repository::CommentRepository,
+};
 use sqlx::PgPool;
 use std::{env, sync::Arc};
 use tower_http::cors::{Any, CorsLayer};

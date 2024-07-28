@@ -1,8 +1,8 @@
 use crate::repository::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::{
-    model::article::{Article, NewArticle, UpdateArticle},
-    repository::article::ArticleRepository,
+use blog_domain::model::articles::{
+    article::{Article, NewArticle, UpdateArticle},
+    i_article_repository::ArticleRepository,
 };
 
 #[derive(Debug, Clone)]
@@ -104,7 +104,7 @@ impl ArticleRepository for ArticleRepositoryForDb {
 #[cfg(feature = "database-test")]
 mod test {
     use super::*;
-    use blog_domain::model::article::ArticleStatus;
+    use blog_domain::model::articles::article::ArticleStatus;
     use dotenv::dotenv;
     use sqlx::PgPool;
 
@@ -260,7 +260,7 @@ pub mod test_util {
     #[cfg(test)]
     mod test {
         use super::*;
-        use blog_domain::model::article::ArticleStatus;
+        use blog_domain::model::articles::article::ArticleStatus;
 
         #[tokio::test]
         async fn test_article_repository_for_memory() {

@@ -1,4 +1,4 @@
-use crate::model::article::{Article, NewArticle, UpdateArticle};
+use crate::model::articles::article::{Article, NewArticle, UpdateArticle};
 use async_trait::async_trait;
 
 #[async_trait]

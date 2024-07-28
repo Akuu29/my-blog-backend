@@ -1,4 +1,4 @@
-use crate::model::comment::{Comment, NewComment, UpdateComment};
+use crate::model::comments::comment::{Comment, NewComment, UpdateComment};
 use async_trait::async_trait;
 
 #[async_trait]
