@@ -3,28 +3,30 @@ use crate::handler::{
     auth::{signin, signup},
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
     token::verify_id_token,
-    user::{delete, update},
+    user::{create, delete, find, update},
 };
 use axum::{
     http::Method,
-    routing::{get, post, put},
+    routing::{get, post},
     Extension, Router,
 };
-use blog_adapter::repository::{
-    article::ArticleRepositoryForDb, auth::AuthRepositoryForFirebase,
-    comment::CommentRepositoryForDb, token::TokenRepositoryForFirebase,
-    user::UserRepositoryForFirebase,
+use blog_adapter::{
+    db::users::user_repository::UserRepository,
+    repository::{
+        article::ArticleRepositoryForDb, auth::AuthRepositoryForFirebase,
+        comment::CommentRepositoryForDb, token::TokenRepositoryForFirebase,
+    },
 };
 use blog_app::{
-    repository::{auth::AuthRepository, token::TokenRepository, user::UserRepository},
+    repository::{auth::AuthRepository, token::TokenRepository},
+    service::users::user_app_service::UserAppService,
     usecase::{
         article::ArticleUseCase, auth::AuthUseCase, comment::CommentUseCase, token::TokenUseCase,
-        user::UserUseCase,
     },
 };
 use blog_domain::model::{
     articles::i_article_repository::ArticleRepository,
-    comments::i_comment_repository::CommentRepository,
+    comments::i_comment_repository::CommentRepository, users::i_user_repository::IUserRepository,
 };
 use sqlx::PgPool;
 use std::{env, sync::Arc};
@@ -44,13 +46,10 @@ pub async fn create_server() {
     ));
     let article_use_case = ArticleUseCase::new(ArticleRepositoryForDb::new(pool.clone()));
     let comment_use_case = CommentUseCase::new(CommentRepositoryForDb::new(pool.clone()));
+    let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
 
     let client = reqwest::Client::new();
     let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
-    let user_use_case = UserUseCase::new(UserRepositoryForFirebase::new(
-        client.clone(),
-        api_key.clone(),
-    ));
     let auth_use_case = AuthUseCase::new(AuthRepositoryForFirebase::new(
         client.clone(),
         api_key.clone(),
@@ -65,7 +64,7 @@ pub async fn create_server() {
         cors,
         auth_use_case,
         token_use_case,
-        user_use_case,
+        user_app_service,
         article_use_case,
         comment_use_case,
     );
@@ -82,14 +81,14 @@ pub async fn create_server() {
 fn create_router<
     S: AuthRepository,
     T: TokenRepository,
-    U: UserRepository,
+    U: IUserRepository,
     V: ArticleRepository,
     W: CommentRepository,
 >(
     cors_layer: CorsLayer,
     auth_use_case: AuthUseCase<S>,
     token_use_case: TokenUseCase<T>,
-    user_use_case: UserUseCase<U>,
+    user_app_service: UserAppService<U>,
     article_use_case: ArticleUseCase<V>,
     comment_use_case: CommentUseCase<W>,
 ) -> Router {
@@ -101,8 +100,12 @@ fn create_router<
     let token_router = Router::new().route("/verify-id-token", get(verify_id_token::<T>));
 
     let users_router = Router::new()
-        .route("/", put(update::<U>).delete(delete::<U>))
-        .layer(Extension(Arc::new(user_use_case)));
+        .route("/", post(create::<U>))
+        .route(
+            "/:id",
+            get(find::<U>).patch(update::<U>).delete(delete::<U>),
+        )
+        .layer(Extension(Arc::new(user_app_service)));
 
     let articles_router = Router::new()
         .route("/", get(all_articles::<V>).post(create_article::<V, T>))
