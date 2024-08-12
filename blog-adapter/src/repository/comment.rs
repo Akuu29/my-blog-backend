@@ -91,7 +91,7 @@ impl CommentRepository for CommentRepositoryForDb {
         .execute(&self.pool)
         .await
         .map_err(|e| match e {
-            sqlx::Error::RowNotFound => RepositoryError::NotFound(id),
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
             e => RepositoryError::Unexpected(e.to_string()),
         })?;
 
@@ -208,7 +208,7 @@ pub mod test_util {
             let comment = store
                 .get(&id)
                 .map(|comment| comment.clone())
-                .ok_or(RepositoryError::NotFound(id))?;
+                .ok_or(RepositoryError::NotFound)?;
 
             Ok(comment)
         }
@@ -226,7 +226,7 @@ pub mod test_util {
 
         async fn update(&self, id: i32, payload: UpdateComment) -> anyhow::Result<Comment> {
             let mut store = self.write_store_ref();
-            let pre_comment = store.get(&id).ok_or(RepositoryError::NotFound(id))?.clone();
+            let pre_comment = store.get(&id).ok_or(RepositoryError::NotFound)?.clone();
             let comment = Comment {
                 id,
                 article_id: pre_comment.article_id,
@@ -241,7 +241,7 @@ pub mod test_util {
 
         async fn delete(&self, id: i32) -> anyhow::Result<()> {
             let mut store = self.write_store_ref();
-            store.remove(&id).ok_or(RepositoryError::NotFound(id))?;
+            store.remove(&id).ok_or(RepositoryError::NotFound)?;
 
             Ok(())
         }

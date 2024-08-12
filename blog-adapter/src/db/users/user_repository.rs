@@ -75,7 +75,7 @@ impl IUserRepository for UserRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| match e {
-            sqlx::Error::RowNotFound => RepositoryError::NotFound(id),
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
             e => RepositoryError::Unexpected(e.to_string()),
         })?;
 
