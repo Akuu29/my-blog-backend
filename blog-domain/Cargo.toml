@@ -13,3 +13,4 @@ validator.workspace = true
 async-trait.workspace = true
 chrono = { version = "0.4.38", features = ["serde"] }
 uuid = { version = "1.9.1", features = ["v4"] }
+rand = "0.8.5"
