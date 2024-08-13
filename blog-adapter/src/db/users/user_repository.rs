@@ -47,6 +47,26 @@ impl IUserRepository for UserRepository {
 
         Ok(user)
     }
+
+    // TODO Bad approach because it's not scalable
+    async fn find_by_idp_sub(&self, idp_sub: &str) -> anyhow::Result<User> {
+        let user = sqlx::query_as::<_, User>(
+            r#"
+            SELECT * FROM users
+            WHERE idp_sub = $1;
+            "#,
+        )
+        .bind(idp_sub)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            e => RepositoryError::Unexpected(e.to_string()),
+        })?;
+
+        Ok(user)
+    }
+
     async fn update(&self, id: i32, payload: UpdateUser) -> anyhow::Result<User> {
         let pre_user = self.find(id).await?;
         let user = sqlx::query_as::<_, User>(
