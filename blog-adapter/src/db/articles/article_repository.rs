@@ -2,33 +2,34 @@ use crate::repository::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::articles::{
     article::{Article, NewArticle, UpdateArticle},
-    i_article_repository::ArticleRepository,
+    i_article_repository::IArticleRepository,
 };
 
 #[derive(Debug, Clone)]
-pub struct ArticleRepositoryForDb {
+pub struct ArticleRepository {
     pool: sqlx::PgPool,
 }
 
-impl ArticleRepositoryForDb {
+impl ArticleRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
     }
 }
 
 #[async_trait]
-impl ArticleRepository for ArticleRepositoryForDb {
-    async fn create(&self, payload: NewArticle) -> anyhow::Result<Article> {
+impl IArticleRepository for ArticleRepository {
+    async fn create(&self, user_id: i32, payload: NewArticle) -> anyhow::Result<Article> {
         let article = sqlx::query_as::<_, Article>(
             r#"
-            INSERT INTO articles (title, body, status)
-            VALUES ($1, $2, $3)
+            INSERT INTO articles (title, body, status, user_id)
+            VALUES ($1, $2, $3, $4)
             RETURNING *;
             "#,
         )
         .bind(payload.title)
         .bind(payload.body)
         .bind(payload.status)
+        .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -92,7 +93,7 @@ impl ArticleRepository for ArticleRepositoryForDb {
         .execute(&self.pool)
         .await
         .map_err(|e| match e {
-            sqlx::Error::RowNotFound => RepositoryError::NotFound(id),
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
             e => RepositoryError::Unexpected(e.to_string()),
         })?;
 
@@ -116,7 +117,7 @@ mod test {
             "failed to connect to database, url is {}",
             database_url
         ));
-        let repository = ArticleRepositoryForDb::new(pool);
+        let repository = ArticleRepository::new(pool);
         let payload = NewArticle {
             title: "title".to_string(),
             body: "body".to_string(),
@@ -124,7 +125,7 @@ mod test {
         };
 
         // create
-        let article = repository.create(payload.clone()).await.unwrap();
+        let article = repository.create(34, payload.clone()).await.unwrap();
         assert_eq!(article.title, payload.title);
         assert_eq!(article.body, payload.body);
         assert_eq!(article.status, payload.status);
@@ -194,8 +195,8 @@ pub mod test_util {
     }
 
     #[async_trait]
-    impl ArticleRepository for RepositoryForMemory {
-        async fn create(&self, payload: NewArticle) -> anyhow::Result<Article> {
+    impl IArticleRepository for RepositoryForMemory {
+        async fn create(&self, user_id: i32, payload: NewArticle) -> anyhow::Result<Article> {
             let mut store = self.write_store_ref();
             let id = (store.len() + 1) as i32;
             let article = Article {
@@ -216,7 +217,7 @@ pub mod test_util {
             let article = store
                 .get(&id)
                 .map(|article| article.clone())
-                .ok_or(RepositoryError::NotFound(id))?;
+                .ok_or(RepositoryError::NotFound)?;
 
             Ok(article)
         }
@@ -272,7 +273,7 @@ pub mod test_util {
             };
 
             // create
-            let article = repository.create(payload.clone()).await.unwrap();
+            let article = repository.create(32, payload.clone()).await.unwrap();
             assert_eq!(article.title, payload.title);
             assert_eq!(article.body, payload.body);
             assert_eq!(article.status, payload.status);
