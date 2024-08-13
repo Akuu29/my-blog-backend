@@ -12,5 +12,3 @@ serde.workspace = true
 validator.workspace = true
 async-trait.workspace = true
 jsonwebtoken = "9.3.0"
-uuid = { version = "1.9.1", features = ["v4"] }
-chrono = "0.4.38"

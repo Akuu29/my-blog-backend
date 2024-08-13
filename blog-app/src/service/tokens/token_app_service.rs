@@ -1,17 +1,21 @@
-use crate::{
-    model::token::{AccessTokenClaims, IdTokenClaims, RefreshTokenClaims},
-    repository::token::TokenRepository,
+use crate::service::tokens::token_service::TokenService;
+use blog_domain::model::tokens::{
+    i_token_repository::ITokenRepository,
+    token::{AccessTokenClaims, IdTokenClaims},
 };
-use jsonwebtoken::{errors, Algorithm, DecodingKey, EncodingKey, TokenData, Validation};
+use jsonwebtoken::{errors, Algorithm, DecodingKey, TokenData, Validation};
 
-#[derive(Clone)]
-pub struct TokenService<T: TokenRepository> {
+pub struct TokenAppService<T: ITokenRepository> {
     repository: T,
+    service: TokenService,
 }
 
-impl<T: TokenRepository> TokenService<T> {
+impl<T: ITokenRepository> TokenAppService<T> {
     pub fn new(repository: T) -> Self {
-        Self { repository }
+        Self {
+            repository,
+            service: TokenService::default(),
+        }
     }
 
     pub async fn verify_id_token(&self, token: &str) -> anyhow::Result<TokenData<IdTokenClaims>> {
@@ -68,40 +72,16 @@ impl<T: TokenRepository> TokenService<T> {
         token_data
     }
 
-    pub fn generate_access_token(
-        &self,
-        token_data: &TokenData<IdTokenClaims>,
-    ) -> anyhow::Result<String> {
-        let claims = AccessTokenClaims::new(token_data.claims.sub());
-
-        let secret_key = std::env::var("SECRET_KEY").expect("undefined SECRET_KEY");
-        let encoding_key = EncodingKey::from_secret(secret_key.as_bytes());
-        let token = jsonwebtoken::encode(
-            &jsonwebtoken::Header::new(Algorithm::HS256),
-            &claims,
-            &encoding_key,
-        )?;
-
-        Ok(token)
-    }
-
-    pub fn generate_refresh_token(&self, sub: &str) -> anyhow::Result<String> {
-        let claims = RefreshTokenClaims::new(sub.to_string());
-
-        let secret_key = std::env::var("SECRET_KEY").expect("undefined SECRET_KEY");
-        let encoding_key = EncodingKey::from_secret(secret_key.as_bytes());
-
-        let token = jsonwebtoken::encode(
-            &jsonwebtoken::Header::new(Algorithm::HS256),
-            &claims,
-            &encoding_key,
-        )?;
-
-        Ok(token)
-    }
-
     fn verify_refresh_token(&self, refresh_token: &str) -> anyhow::Result<()> {
         todo!()
+    }
+
+    pub fn generate_access_token(&self, user_id: i32) -> anyhow::Result<String> {
+        self.service.generate_access_token(user_id)
+    }
+
+    pub fn generate_refresh_token(&self, user_id: i32) -> anyhow::Result<String> {
+        self.service.generate_refresh_token(user_id)
     }
 
     fn refresh_access_token(&self, token: &str) -> anyhow::Result<()> {
