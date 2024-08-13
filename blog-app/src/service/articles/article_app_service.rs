@@ -1,19 +1,19 @@
 use blog_domain::model::articles::{
     article::{Article, NewArticle, UpdateArticle},
-    i_article_repository::ArticleRepository,
+    i_article_repository::IArticleRepository,
 };
 
-pub struct ArticleUseCase<T: ArticleRepository> {
+pub struct ArticleAppService<T: IArticleRepository> {
     repository: T,
 }
 
-impl<T: ArticleRepository> ArticleUseCase<T> {
+impl<T: IArticleRepository> ArticleAppService<T> {
     pub fn new(repository: T) -> Self {
         Self { repository }
     }
 
-    pub async fn create(&self, payload: NewArticle) -> anyhow::Result<Article> {
-        self.repository.create(payload).await
+    pub async fn create(&self, user_id: i32, payload: NewArticle) -> anyhow::Result<Article> {
+        self.repository.create(user_id, payload).await
     }
 
     pub async fn find(&self, id: i32) -> anyhow::Result<Article> {
