@@ -1,5 +1,3 @@
-pub mod auth;
-
 use thiserror::Error;
 
 #[derive(Debug, Error)]

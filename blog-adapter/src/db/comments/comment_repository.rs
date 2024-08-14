@@ -1,4 +1,4 @@
-use crate::repository::RepositoryError;
+use crate::db::utils::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::comments::{
     comment::{Comment, NewComment, UpdateComment},

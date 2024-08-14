@@ -3,7 +3,7 @@ use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
-use blog_adapter::repository::RepositoryError;
+use blog_adapter::db::utils::RepositoryError;
 use blog_app::service::{
     tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
 };
