@@ -19,6 +19,7 @@ pub struct NewComment {
     pub article_id: i32,
     #[validate(length(min = 1, message = "body length must be 1 or more"))]
     pub body: String,
+    pub user_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
