@@ -1,24 +1,24 @@
 use async_trait::async_trait;
-use blog_app::{
-    model::auth::{SigninUser, SignupUser, UserCredentials},
-    repository::auth::AuthRepository,
+use blog_app::model::auth::{
+    auth::{SigninUser, SignupUser, UserCredentials},
+    i_auth_repository::IAuthRepository,
 };
 use std::env;
 
 #[derive(Debug, Clone)]
-pub struct AuthRepositoryForFirebase {
+pub struct AuthRepository {
     client: reqwest::Client,
     api_key: String,
 }
 
-impl AuthRepositoryForFirebase {
+impl AuthRepository {
     pub fn new(client: reqwest::Client, api_key: String) -> Self {
         Self { client, api_key }
     }
 }
 
 #[async_trait]
-impl AuthRepository for AuthRepositoryForFirebase {
+impl IAuthRepository for AuthRepository {
     async fn signup(&self, payload: SignupUser) -> anyhow::Result<UserCredentials> {
         let firebase_signup_url =
             env::var("FIREBASE_SIGNUP_URL").expect("undefined FIREBASE_SIGNUP_URL");
