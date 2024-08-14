@@ -1,8 +1,8 @@
-use crate::model::auth::{SigninUser, SignupUser, UserCredentials};
+use crate::model::auth::auth::{SigninUser, SignupUser, UserCredentials};
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait AuthRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
+pub trait IAuthRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
     async fn signup(&self, payload: SignupUser) -> anyhow::Result<UserCredentials>;
     async fn signin(&self, payload: SigninUser) -> anyhow::Result<UserCredentials>;
     async fn signout(&self, payload: SigninUser) -> anyhow::Result<()>;

@@ -1,13 +1,13 @@
-use crate::{
-    model::auth::{SigninUser, SignupUser, UserCredentials},
-    repository::auth::AuthRepository,
+use crate::model::auth::{
+    auth::{SigninUser, SignupUser, UserCredentials},
+    i_auth_repository::IAuthRepository,
 };
 
-pub struct AuthUseCase<T: AuthRepository> {
+pub struct AuthAppService<T: IAuthRepository> {
     repository: T,
 }
 
-impl<T: AuthRepository> AuthUseCase<T> {
+impl<T: IAuthRepository> AuthAppService<T> {
     pub fn new(repository: T) -> Self {
         Self { repository }
     }
