@@ -2,32 +2,33 @@ use crate::repository::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::comments::{
     comment::{Comment, NewComment, UpdateComment},
-    i_comment_repository::CommentRepository,
+    i_comment_repository::ICommentRepository,
 };
 
 #[derive(Debug, Clone)]
-pub struct CommentRepositoryForDb {
+pub struct CommentRepository {
     pool: sqlx::PgPool,
 }
 
-impl CommentRepositoryForDb {
+impl CommentRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
     }
 }
 
 #[async_trait]
-impl CommentRepository for CommentRepositoryForDb {
+impl ICommentRepository for CommentRepository {
     async fn create(&self, payload: NewComment) -> anyhow::Result<Comment> {
         let comment = sqlx::query_as::<_, Comment>(
             r#"
-            INSERT INTO comments (article_id, body)
-            VALUES ($1, $2)
+            INSERT INTO comments (article_id, body, user_id)
+            VALUES ($1, $2, $3)
             RETURNING *;
             "#,
         )
         .bind(payload.article_id)
         .bind(payload.body)
+        .bind(payload.user_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -48,6 +49,7 @@ impl CommentRepository for CommentRepositoryForDb {
         Ok(comment)
     }
 
+    // TODO Bad approach because it's not scalable
     async fn find_by_article_id(&self, article_id: i32) -> anyhow::Result<Vec<Comment>> {
         let comments = sqlx::query_as::<_, Comment>(
             r#"
@@ -113,10 +115,11 @@ mod test {
             "failed to connect to database, url is {}",
             database_url
         ));
-        let repository = CommentRepositoryForDb::new(pool);
+        let repository = CommentRepository::new(pool);
         let payload = NewComment {
             article_id: 1,
             body: "test".to_string(),
+            user_id: None,
         };
 
         // create
@@ -187,7 +190,7 @@ pub mod test_util {
     }
 
     #[async_trait]
-    impl CommentRepository for RepositoryForMemory {
+    impl ICommentRepository for RepositoryForMemory {
         async fn create(&self, payload: NewComment) -> anyhow::Result<Comment> {
             let mut store = self.write_store_ref();
             let id = (store.len() + 1) as i32;
@@ -257,6 +260,7 @@ pub mod test_util {
             let payload = NewComment {
                 article_id: 1,
                 body: "test".to_string(),
+                user_id: None,
             };
 
             // create

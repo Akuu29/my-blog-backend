@@ -1,5 +1,4 @@
 pub mod auth;
-pub mod comment;
 
 use thiserror::Error;
 
