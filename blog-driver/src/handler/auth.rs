@@ -5,17 +5,19 @@ use axum::{
     response::IntoResponse,
 };
 use blog_app::{
-    model::auth::{SigninUser, SignupUser},
-    repository::auth::AuthRepository,
-    usecase::auth::AuthUseCase,
+    model::auth::{
+        auth::{SigninUser, SignupUser},
+        i_auth_repository::IAuthRepository,
+    },
+    service::auth::auth_app_service::AuthAppService,
 };
 use std::sync::Arc;
 
-pub async fn signup<T: AuthRepository>(
-    Extension(auth_use_case): Extension<Arc<AuthUseCase<T>>>,
+pub async fn signup<T: IAuthRepository>(
+    Extension(auth_app_service): Extension<Arc<AuthAppService<T>>>,
     ValidatedJson(payload): ValidatedJson<SignupUser>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let user_credentials = auth_use_case
+    let user_credentials = auth_app_service
         .signup(payload)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
@@ -23,11 +25,11 @@ pub async fn signup<T: AuthRepository>(
     Ok((StatusCode::CREATED, Json(user_credentials)))
 }
 
-pub async fn signin<T: AuthRepository>(
-    Extension(auth_use_case): Extension<Arc<AuthUseCase<T>>>,
+pub async fn signin<T: IAuthRepository>(
+    Extension(auth_app_service): Extension<Arc<AuthAppService<T>>>,
     ValidatedJson(payload): ValidatedJson<SigninUser>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let user_credentials = auth_use_case
+    let user_credentials = auth_app_service
         .signin(payload)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;

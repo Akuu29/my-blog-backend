@@ -15,17 +15,15 @@ use blog_adapter::{
         articles::article_repository::ArticleRepository,
         comments::comment_repository::CommentRepository, users::user_repository::UserRepository,
     },
-    idp::tokens::token_repository::TokenRepository,
-    repository::auth::AuthRepositoryForFirebase,
+    idp::{auth::auth_repository::AuthRepository, tokens::token_repository::TokenRepository},
 };
 use blog_app::{
-    repository::auth::AuthRepository,
+    model::auth::i_auth_repository::IAuthRepository,
     service::{
-        articles::article_app_service::ArticleAppService,
+        articles::article_app_service::ArticleAppService, auth::auth_app_service::AuthAppService,
         comments::comment_app_service::CommentAppService,
         tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
     },
-    usecase::auth::AuthUseCase,
 };
 use blog_domain::model::{
     articles::i_article_repository::IArticleRepository,
@@ -54,10 +52,8 @@ pub async fn create_server() {
 
     let client = reqwest::Client::new();
     let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
-    let auth_use_case = AuthUseCase::new(AuthRepositoryForFirebase::new(
-        client.clone(),
-        api_key.clone(),
-    ));
+    let auth_app_service =
+        AuthAppService::new(AuthRepository::new(client.clone(), api_key.clone()));
     let token_app_service = TokenAppService::new(TokenRepository::new(client.clone()));
 
     let cors = CorsLayer::new()
@@ -66,7 +62,7 @@ pub async fn create_server() {
 
     let router = create_router(
         cors,
-        auth_use_case,
+        auth_app_service,
         token_app_service,
         user_app_service,
         article_app_service,
@@ -83,14 +79,14 @@ pub async fn create_server() {
 }
 
 fn create_router<
-    S: AuthRepository,
+    S: IAuthRepository,
     T: ITokenRepository,
     U: IUserRepository,
     V: IArticleRepository,
     W: ICommentRepository,
 >(
     cors_layer: CorsLayer,
-    auth_use_case: AuthUseCase<S>,
+    auth_app_service: AuthAppService<S>,
     token_app_service: TokenAppService<T>,
     user_app_service: UserAppService<U>,
     article_app_service: ArticleAppService<V>,
@@ -99,7 +95,7 @@ fn create_router<
     let auth_router = Router::new()
         .route("/signup", post(signup::<S>))
         .route("/signin", post(signin::<S>))
-        .layer(Extension(Arc::new(auth_use_case)));
+        .layer(Extension(Arc::new(auth_app_service)));
 
     let token_router = Router::new().route("/verify", get(verify_id_token::<T, U>));
 
