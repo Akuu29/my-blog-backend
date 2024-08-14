@@ -11,21 +11,25 @@ use axum::{
     Extension, Router,
 };
 use blog_adapter::{
-    db::{articles::article_repository::ArticleRepository, users::user_repository::UserRepository},
+    db::{
+        articles::article_repository::ArticleRepository,
+        comments::comment_repository::CommentRepository, users::user_repository::UserRepository,
+    },
     idp::tokens::token_repository::TokenRepository,
-    repository::{auth::AuthRepositoryForFirebase, comment::CommentRepositoryForDb},
+    repository::auth::AuthRepositoryForFirebase,
 };
 use blog_app::{
     repository::auth::AuthRepository,
     service::{
         articles::article_app_service::ArticleAppService,
+        comments::comment_app_service::CommentAppService,
         tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
     },
-    usecase::{auth::AuthUseCase, comment::CommentUseCase},
+    usecase::auth::AuthUseCase,
 };
 use blog_domain::model::{
     articles::i_article_repository::IArticleRepository,
-    comments::i_comment_repository::CommentRepository,
+    comments::i_comment_repository::ICommentRepository,
     tokens::i_token_repository::ITokenRepository, users::i_user_repository::IUserRepository,
 };
 use sqlx::PgPool;
@@ -45,7 +49,7 @@ pub async fn create_server() {
         database_url
     ));
     let article_app_service = ArticleAppService::new(ArticleRepository::new(pool.clone()));
-    let comment_use_case = CommentUseCase::new(CommentRepositoryForDb::new(pool.clone()));
+    let comment_app_service = CommentAppService::new(CommentRepository::new(pool.clone()));
     let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
 
     let client = reqwest::Client::new();
@@ -66,7 +70,7 @@ pub async fn create_server() {
         token_app_service,
         user_app_service,
         article_app_service,
-        comment_use_case,
+        comment_app_service,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
@@ -83,14 +87,14 @@ fn create_router<
     T: ITokenRepository,
     U: IUserRepository,
     V: IArticleRepository,
-    W: CommentRepository,
+    W: ICommentRepository,
 >(
     cors_layer: CorsLayer,
     auth_use_case: AuthUseCase<S>,
     token_app_service: TokenAppService<T>,
     user_app_service: UserAppService<U>,
     article_app_service: ArticleAppService<V>,
-    comment_use_case: CommentUseCase<W>,
+    comment_app_service: CommentAppService<W>,
 ) -> Router {
     let auth_router = Router::new()
         .route("/signup", post(signup::<S>))
@@ -123,7 +127,7 @@ fn create_router<
                 .delete(delete_comment::<W>),
         )
         .route("/related/:article_id", get(find_by_article_id::<W>))
-        .layer(Extension(Arc::new(comment_use_case)));
+        .layer(Extension(Arc::new(comment_app_service)));
 
     Router::new()
         .route("/", get(root))
