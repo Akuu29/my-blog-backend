@@ -11,22 +11,22 @@ use axum::{
     Extension, Router,
 };
 use blog_adapter::{
-    db::users::user_repository::UserRepository,
-    repository::{
-        article::ArticleRepositoryForDb, auth::AuthRepositoryForFirebase,
-        comment::CommentRepositoryForDb, token::TokenRepositoryForFirebase,
-    },
+    db::{articles::article_repository::ArticleRepository, users::user_repository::UserRepository},
+    idp::tokens::token_repository::TokenRepository,
+    repository::{auth::AuthRepositoryForFirebase, comment::CommentRepositoryForDb},
 };
 use blog_app::{
-    repository::{auth::AuthRepository, token::TokenRepository},
-    service::users::user_app_service::UserAppService,
-    usecase::{
-        article::ArticleUseCase, auth::AuthUseCase, comment::CommentUseCase, token::TokenUseCase,
+    repository::auth::AuthRepository,
+    service::{
+        articles::article_app_service::ArticleAppService,
+        tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
     },
+    usecase::{auth::AuthUseCase, comment::CommentUseCase},
 };
 use blog_domain::model::{
-    articles::i_article_repository::ArticleRepository,
-    comments::i_comment_repository::CommentRepository, users::i_user_repository::IUserRepository,
+    articles::i_article_repository::IArticleRepository,
+    comments::i_comment_repository::CommentRepository,
+    tokens::i_token_repository::ITokenRepository, users::i_user_repository::IUserRepository,
 };
 use sqlx::PgPool;
 use std::{env, sync::Arc};
@@ -44,7 +44,7 @@ pub async fn create_server() {
         "failed to connect to database, url is {}",
         database_url
     ));
-    let article_use_case = ArticleUseCase::new(ArticleRepositoryForDb::new(pool.clone()));
+    let article_app_service = ArticleAppService::new(ArticleRepository::new(pool.clone()));
     let comment_use_case = CommentUseCase::new(CommentRepositoryForDb::new(pool.clone()));
     let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
 
@@ -54,7 +54,7 @@ pub async fn create_server() {
         client.clone(),
         api_key.clone(),
     ));
-    let token_use_case = TokenUseCase::new(TokenRepositoryForFirebase::new(client.clone()));
+    let token_app_service = TokenAppService::new(TokenRepository::new(client.clone()));
 
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
@@ -63,9 +63,9 @@ pub async fn create_server() {
     let router = create_router(
         cors,
         auth_use_case,
-        token_use_case,
+        token_app_service,
         user_app_service,
-        article_use_case,
+        article_app_service,
         comment_use_case,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
@@ -80,16 +80,16 @@ pub async fn create_server() {
 
 fn create_router<
     S: AuthRepository,
-    T: TokenRepository,
+    T: ITokenRepository,
     U: IUserRepository,
-    V: ArticleRepository,
+    V: IArticleRepository,
     W: CommentRepository,
 >(
     cors_layer: CorsLayer,
     auth_use_case: AuthUseCase<S>,
-    token_use_case: TokenUseCase<T>,
+    token_app_service: TokenAppService<T>,
     user_app_service: UserAppService<U>,
-    article_use_case: ArticleUseCase<V>,
+    article_app_service: ArticleAppService<V>,
     comment_use_case: CommentUseCase<W>,
 ) -> Router {
     let auth_router = Router::new()
@@ -97,15 +97,12 @@ fn create_router<
         .route("/signin", post(signin::<S>))
         .layer(Extension(Arc::new(auth_use_case)));
 
-    let token_router = Router::new().route("/verify-id-token", get(verify_id_token::<T>));
+    let token_router = Router::new().route("/verify", get(verify_id_token::<T, U>));
 
-    let users_router = Router::new()
-        .route("/", post(create::<U>))
-        .route(
-            "/:id",
-            get(find::<U>).patch(update::<U>).delete(delete::<U>),
-        )
-        .layer(Extension(Arc::new(user_app_service)));
+    let users_router = Router::new().route("/", post(create::<U>)).route(
+        "/:id",
+        get(find::<U>).patch(update::<U>).delete(delete::<U>),
+    );
 
     let articles_router = Router::new()
         .route("/", get(all_articles::<V>).post(create_article::<V, T>))
@@ -115,7 +112,7 @@ fn create_router<
                 .patch(update_article::<V, T>)
                 .delete(delete_article::<V, T>),
         )
-        .layer(Extension(Arc::new(article_use_case)));
+        .layer(Extension(Arc::new(article_app_service)));
 
     let comments_router = Router::new()
         .route("/", post(create_comment::<W>))
@@ -135,7 +132,8 @@ fn create_router<
         .nest("/users", users_router)
         .nest("/articles", articles_router)
         .nest("/comments", comments_router)
-        .layer(Extension(Arc::new(token_use_case)))
+        .layer(Extension(Arc::new(token_app_service)))
+        .layer(Extension(Arc::new(user_app_service)))
         .layer(cors_layer)
 }
 

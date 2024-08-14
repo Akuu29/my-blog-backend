@@ -10,23 +10,26 @@ use axum_extra::{
     TypedHeader,
 };
 use blog_app::{
-    repository::token::TokenRepository,
-    usecase::{article::ArticleUseCase, token::TokenUseCase},
+    service::articles::article_app_service::ArticleAppService,
+    service::tokens::token_app_service::TokenAppService,
 };
-use blog_domain::model::articles::{
-    article::{NewArticle, UpdateArticle},
-    i_article_repository::ArticleRepository,
+use blog_domain::model::{
+    articles::{
+        article::{NewArticle, UpdateArticle},
+        i_article_repository::IArticleRepository,
+    },
+    tokens::i_token_repository::ITokenRepository,
 };
 use std::sync::Arc;
 
-pub async fn create_article<T: ArticleRepository, U: TokenRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
-    Extension(token_usecase): Extension<Arc<TokenUseCase<U>>>,
+pub async fn create_article<T: IArticleRepository, U: ITokenRepository>(
+    Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
     ValidatedJson(payload): ValidatedJson<NewArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let access_token = bearer.token().to_string();
-    let _verified_token = token_usecase
+    let access_token_data = token_app_service
         .verify_access_token(&access_token)
         .await
         .map_err(|e| {
@@ -34,19 +37,19 @@ pub async fn create_article<T: ArticleRepository, U: TokenRepository>(
             StatusCode::UNAUTHORIZED
         })?;
 
-    let article = article_usecase
-        .create(payload)
+    let article = article_app_service
+        .create(access_token_data.claims.sub, payload)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 
     Ok((StatusCode::CREATED, Json(article)))
 }
 
-pub async fn find_article<T: ArticleRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
+pub async fn find_article<T: IArticleRepository>(
+    Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let article = article_usecase
+    let article = article_app_service
         .find(id)
         .await
         .or(Err(StatusCode::NOT_FOUND))?;
@@ -54,10 +57,10 @@ pub async fn find_article<T: ArticleRepository>(
     Ok((StatusCode::OK, Json(article)))
 }
 
-pub async fn all_articles<T: ArticleRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
+pub async fn all_articles<T: IArticleRepository>(
+    Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let articles = article_usecase
+    let articles = article_app_service
         .all()
         .await
         .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
@@ -65,15 +68,15 @@ pub async fn all_articles<T: ArticleRepository>(
     Ok((StatusCode::OK, Json(articles)))
 }
 
-pub async fn update_article<T: ArticleRepository, U: TokenRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
-    Extension(token_usecase): Extension<Arc<TokenUseCase<U>>>,
+pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
+    Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     Path(id): Path<i32>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
     ValidatedJson(payload): ValidatedJson<UpdateArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let access_token = bearer.token().to_string();
-    let _verified_token = token_usecase
+    let _access_token_data = token_app_service
         .verify_access_token(&access_token)
         .await
         .map_err(|e| {
@@ -81,7 +84,7 @@ pub async fn update_article<T: ArticleRepository, U: TokenRepository>(
             StatusCode::UNAUTHORIZED
         })?;
 
-    let article = article_usecase
+    let article = article_app_service
         .update(id, payload)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
@@ -89,14 +92,14 @@ pub async fn update_article<T: ArticleRepository, U: TokenRepository>(
     Ok((StatusCode::OK, Json(article)))
 }
 
-pub async fn delete_article<T: ArticleRepository, U: TokenRepository>(
-    Extension(article_usecase): Extension<Arc<ArticleUseCase<T>>>,
-    Extension(token_usecase): Extension<Arc<TokenUseCase<U>>>,
+pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
+    Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let access_token = bearer.token().to_string();
-    let _verified_token = token_usecase
+    let _access_token_data = token_app_service
         .verify_access_token(&access_token)
         .await
         .map_err(|e| {
@@ -104,7 +107,7 @@ pub async fn delete_article<T: ArticleRepository, U: TokenRepository>(
             StatusCode::UNAUTHORIZED
         })?;
 
-    article_usecase
+    article_app_service
         .delete(id)
         .await
         .map(|_| StatusCode::NO_CONTENT)

@@ -20,3 +20,4 @@ serde.workspace = true
 reqwest.workspace = true
 tower-http = { version = "0.5.2", features = ["cors"] }
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
+anyhow.workspace = true
