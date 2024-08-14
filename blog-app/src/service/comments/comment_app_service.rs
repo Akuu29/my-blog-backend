@@ -1,13 +1,13 @@
 use blog_domain::model::comments::{
     comment::{Comment, NewComment, UpdateComment},
-    i_comment_repository::CommentRepository,
+    i_comment_repository::ICommentRepository,
 };
 
-pub struct CommentUseCase<T: CommentRepository> {
+pub struct CommentAppService<T: ICommentRepository> {
     repository: T,
 }
 
-impl<T: CommentRepository> CommentUseCase<T> {
+impl<T: ICommentRepository> CommentAppService<T> {
     pub fn new(repository: T) -> Self {
         Self { repository }
     }
@@ -20,6 +20,7 @@ impl<T: CommentRepository> CommentUseCase<T> {
         self.repository.find(id).await
     }
 
+    // TODO Bad approach because it's not scalable
     pub async fn find_by_article_id(&self, article_id: i32) -> anyhow::Result<Vec<Comment>> {
         self.repository.find_by_article_id(article_id).await
     }
