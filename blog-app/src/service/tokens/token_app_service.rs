@@ -1,7 +1,10 @@
 use crate::service::tokens::token_service::TokenService;
-use blog_domain::model::tokens::{
-    i_token_repository::ITokenRepository,
-    token::{AccessTokenClaims, IdTokenClaims},
+use blog_domain::model::{
+    tokens::{
+        i_token_repository::ITokenRepository,
+        token::{AccessTokenClaims, IdTokenClaims},
+    },
+    users::user::User,
 };
 use jsonwebtoken::{errors, Algorithm, DecodingKey, TokenData, Validation};
 
@@ -76,12 +79,12 @@ impl<T: ITokenRepository> TokenAppService<T> {
         todo!()
     }
 
-    pub fn generate_access_token(&self, user_id: i32) -> anyhow::Result<String> {
-        self.service.generate_access_token(user_id)
+    pub fn generate_access_token(&self, user: &User) -> anyhow::Result<String> {
+        self.service.generate_access_token(&user)
     }
 
-    pub fn generate_refresh_token(&self, user_id: i32) -> anyhow::Result<String> {
-        self.service.generate_refresh_token(user_id)
+    pub fn generate_refresh_token(&self, user: &User) -> anyhow::Result<String> {
+        self.service.generate_refresh_token(&user)
     }
 
     fn refresh_access_token(&self, token: &str) -> anyhow::Result<()> {

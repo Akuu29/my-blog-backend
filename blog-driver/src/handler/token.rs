@@ -29,11 +29,11 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
     match exists_user {
         Ok(user) => {
             let access_token = token_app_service
-                .generate_access_token(user.id)
+                .generate_access_token(&user)
                 .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
 
             let refresh_token = token_app_service
-                .generate_refresh_token(user.id)
+                .generate_refresh_token(&user)
                 .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
 
             let api_credentials = ApiCredentials::new(&access_token, &refresh_token);
@@ -43,17 +43,17 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
         Err(e) => match e.downcast_ref::<RepositoryError>() {
             Some(RepositoryError::NotFound) => {
                 let new_user = NewUser::default().new(&id_token_claims.email, &id_token_claims.sub);
-                let new_user = user_app_service
+                let user = user_app_service
                     .create(new_user)
                     .await
                     .or(Err(StatusCode::BAD_REQUEST))?;
 
                 let access_token = token_app_service
-                    .generate_access_token(new_user.id)
+                    .generate_access_token(&user)
                     .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
 
                 let refresh_token = token_app_service
-                    .generate_refresh_token(new_user.id)
+                    .generate_refresh_token(&user)
                     .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
 
                 let api_credentials = ApiCredentials::new(&access_token, &refresh_token);

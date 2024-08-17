@@ -1,4 +1,4 @@
-use crate::model::users::user::UserRole;
+use crate::model::users::user::{User, UserRole};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
@@ -25,11 +25,11 @@ pub struct AccessTokenClaims {
     nbf: usize,
     /// unique identifier for the token
     jti: String,
-    roles: UserRole,
+    pub role: UserRole,
 }
 
 impl AccessTokenClaims {
-    pub fn new(user_id: i32) -> Self {
+    pub fn new(user: &User) -> Self {
         let now = Utc::now();
         let expiration = now + chrono::Duration::hours(1);
         let not_before = now;
@@ -39,10 +39,10 @@ impl AccessTokenClaims {
             iat: now.timestamp() as usize,
             aud: std::env::var("SERVICE_NAME").expect("undefined API_NAME"),
             iss: std::env::var("API_NAME").expect("undefined API_NAME"),
-            sub: user_id,
+            sub: user.id,
             nbf: not_before.timestamp() as usize,
             jti: uuid::Uuid::new_v4().to_string(),
-            roles: UserRole::default(),
+            role: user.role.clone(),
         }
     }
 
@@ -61,7 +61,7 @@ pub struct RefreshTokenClaims {
 }
 
 impl RefreshTokenClaims {
-    pub fn new(user_id: i32) -> Self {
+    pub fn new(user: &User) -> Self {
         let now = Utc::now();
         let expiration = now + chrono::Duration::days(30);
 
@@ -70,7 +70,7 @@ impl RefreshTokenClaims {
             iat: now.timestamp() as usize,
             aud: std::env::var("SERVICE_NAME").expect("undefined SERVICE_NAME"),
             iss: std::env::var("API_NAME").expect("undefined API_NAME"),
-            sub: user_id,
+            sub: user.id,
         }
     }
 }
