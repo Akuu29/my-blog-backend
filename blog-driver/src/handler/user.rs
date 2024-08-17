@@ -4,17 +4,41 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use blog_app::service::users::user_app_service::UserAppService;
-use blog_domain::model::users::{
-    i_user_repository::IUserRepository,
-    user::{NewUser, UpdateUser},
+use axum_extra::{
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
+};
+use blog_app::service::{
+    tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
+};
+use blog_domain::model::{
+    tokens::i_token_repository::ITokenRepository,
+    users::{
+        i_user_repository::IUserRepository,
+        user::{NewUser, UpdateUser, UserRole},
+    },
 };
 use std::sync::Arc;
 
-pub async fn create<T: IUserRepository>(
+pub async fn create<T: IUserRepository, U: ITokenRepository>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
     ValidatedJson(payload): ValidatedJson<NewUser>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    let access_token = bearer.token().to_string();
+    let access_token_data = token_app_service
+        .verify_access_token(&access_token)
+        .await
+        .map_err(|e| {
+            tracing::info!("Failed to verify access token: {:?}", e);
+            StatusCode::UNAUTHORIZED
+        })?;
+
+    if access_token_data.claims.role != UserRole::Admin {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
     let user = user_app_service
         .create(payload)
         .await

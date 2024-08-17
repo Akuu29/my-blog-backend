@@ -6,7 +6,7 @@ use sqlx::{
 };
 use validator::Validate;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::Type, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, sqlx::Type, Default, Clone, PartialEq)]
 #[sqlx(type_name = "user_role", rename_all = "lowercase")]
 pub enum UserRole {
     Admin,

@@ -99,10 +99,12 @@ fn create_router<
 
     let token_router = Router::new().route("/verify", get(verify_id_token::<T, U>));
 
-    let users_router = Router::new().route("/", post(create::<U>)).route(
-        "/:id",
-        get(find::<U>).patch(update::<U>).delete(delete::<U>),
-    );
+    let users_router = Router::new()
+        .route("/protected", post(create::<U, T>))
+        .route(
+            "/:id",
+            get(find::<U>).patch(update::<U>).delete(delete::<U>),
+        );
 
     let articles_router = Router::new()
         .route("/", get(all_articles::<V>).post(create_article::<V, T>))
