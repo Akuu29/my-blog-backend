@@ -37,8 +37,8 @@ impl AccessTokenClaims {
         AccessTokenClaims {
             exp: expiration.timestamp() as usize,
             iat: now.timestamp() as usize,
-            aud: std::env::var("SERVICE_NAME").expect("undefined API_NAME"),
-            iss: std::env::var("API_NAME").expect("undefined API_NAME"),
+            aud: std::env::var("AUDIENCE").expect("undefined AUDIENCE"),
+            iss: std::env::var("ISSUER").expect("undefined ISSUER"),
             sub: user.id,
             nbf: not_before.timestamp() as usize,
             jti: uuid::Uuid::new_v4().to_string(),
@@ -68,8 +68,8 @@ impl RefreshTokenClaims {
         RefreshTokenClaims {
             exp: expiration.timestamp() as usize,
             iat: now.timestamp() as usize,
-            aud: std::env::var("SERVICE_NAME").expect("undefined SERVICE_NAME"),
-            iss: std::env::var("API_NAME").expect("undefined API_NAME"),
+            aud: std::env::var("AUDIENCE").expect("undefined AUDIENCE"),
+            iss: std::env::var("ISSUER").expect("undefined ISSUER"),
             sub: user.id,
         }
     }

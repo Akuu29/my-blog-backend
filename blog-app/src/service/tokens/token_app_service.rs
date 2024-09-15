@@ -54,13 +54,14 @@ impl<T: ITokenRepository> TokenAppService<T> {
         &self,
         id_token: &str,
     ) -> anyhow::Result<TokenData<AccessTokenClaims>> {
-        let secret_key = std::env::var("SECRET_KEY").expect("undefined SECRET_KEY");
+        let secret_key =
+            std::env::var("ACCESS_TOKEN_SECRET_KEY").expect("undefined ACCESS_TOKEN_SECRET_KEY");
         let decoding_key = DecodingKey::from_secret(secret_key.as_bytes());
         let validation = {
             let mut validation = Validation::new(Algorithm::HS256);
-            let audience = std::env::var("SERVICE_NAME").expect("undefined SERVICE_NAME");
+            let audience = std::env::var("AUDIENCE").expect("undefined AUDIENCE");
             validation.set_audience(&[audience]);
-            let issuer = std::env::var("API_NAME").expect("undefined API_NAME");
+            let issuer = std::env::var("ISSUER").expect("undefined ISSUER");
             validation.set_issuer(&[issuer]);
             validation
         };
