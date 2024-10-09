@@ -4,6 +4,7 @@ use blog_domain::model::articles::{
     article::{Article, NewArticle, UpdateArticle},
     i_article_repository::IArticleRepository,
 };
+use sqlx::types::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct ArticleRepository {
@@ -18,7 +19,7 @@ impl ArticleRepository {
 
 #[async_trait]
 impl IArticleRepository for ArticleRepository {
-    async fn create(&self, user_id: i32, payload: NewArticle) -> anyhow::Result<Article> {
+    async fn create(&self, user_id: Uuid, payload: NewArticle) -> anyhow::Result<Article> {
         let article = sqlx::query_as::<_, Article>(
             r#"
             INSERT INTO articles (title, body, status, user_id)
@@ -107,7 +108,7 @@ mod test {
     use super::*;
     use blog_domain::model::articles::article::ArticleStatus;
     use dotenv::dotenv;
-    use sqlx::PgPool;
+    use sqlx::{types::Uuid, PgPool};
 
     #[tokio::test]
     async fn test_article_repository_for_db() {
@@ -125,7 +126,10 @@ mod test {
         };
 
         // create
-        let article = repository.create(34, payload.clone()).await.unwrap();
+        let article = repository
+            .create(Uuid::new_v4(), payload.clone())
+            .await
+            .unwrap();
         assert_eq!(article.title, payload.title);
         assert_eq!(article.body, payload.body);
         assert_eq!(article.status, payload.status);
@@ -166,6 +170,7 @@ mod test {
 pub mod test_util {
     use super::*;
     use chrono::Local;
+    use sqlx::types::Uuid;
     use std::{
         collections::HashMap,
         sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
@@ -196,7 +201,7 @@ pub mod test_util {
 
     #[async_trait]
     impl IArticleRepository for RepositoryForMemory {
-        async fn create(&self, user_id: i32, payload: NewArticle) -> anyhow::Result<Article> {
+        async fn create(&self, user_id: Uuid, payload: NewArticle) -> anyhow::Result<Article> {
             let mut store = self.write_store_ref();
             let id = (store.len() + 1) as i32;
             let article = Article {
@@ -262,6 +267,7 @@ pub mod test_util {
     mod test {
         use super::*;
         use blog_domain::model::articles::article::ArticleStatus;
+        use sqlx::types::Uuid;
 
         #[tokio::test]
         async fn test_article_repository_for_memory() {
@@ -273,7 +279,10 @@ pub mod test_util {
             };
 
             // create
-            let article = repository.create(32, payload.clone()).await.unwrap();
+            let article = repository
+                .create(Uuid::new_v4(), payload.clone())
+                .await
+                .unwrap();
             assert_eq!(article.title, payload.title);
             assert_eq!(article.body, payload.body);
             assert_eq!(article.status, payload.status);

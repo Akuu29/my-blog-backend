@@ -1,8 +1,12 @@
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use sqlx::{
-    types::chrono::{DateTime, Local},
-    FromRow,
+    postgres::PgRow,
+    types::{
+        chrono::{DateTime, Local},
+        Uuid,
+    },
+    Error, FromRow, Row,
 };
 use validator::Validate;
 
@@ -14,15 +18,37 @@ pub enum UserRole {
     User,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Serialize)]
 pub struct User {
-    pub id: i32,
+    pub id: Uuid,
     pub name: String,
     pub email: String,
     pub role: UserRole,
     idp_sub: String,
     created_at: DateTime<Local>,
     updated_at: DateTime<Local>,
+}
+
+impl<'r> FromRow<'r, PgRow> for User {
+    fn from_row(row: &'r PgRow) -> Result<Self, Error> {
+        let id: Uuid = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        let email: String = row.try_get("email")?;
+        let role: UserRole = row.try_get("role")?;
+        let idp_sub: String = row.try_get("idp_sub")?;
+        let created_at: DateTime<Local> = row.try_get("created_at")?;
+        let updated_at: DateTime<Local> = row.try_get("updated_at")?;
+
+        Ok(User {
+            id,
+            name,
+            email,
+            role,
+            idp_sub,
+            created_at,
+            updated_at,
+        })
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Validate)]

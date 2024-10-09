@@ -18,6 +18,7 @@ use blog_domain::model::{
         user::{NewUser, UpdateUser, UserRole},
     },
 };
+use sqlx::types::Uuid;
 use std::sync::Arc;
 
 pub async fn create<T: IUserRepository, U: ITokenRepository>(
@@ -49,10 +50,10 @@ pub async fn create<T: IUserRepository, U: ITokenRepository>(
 
 pub async fn find<T: IUserRepository>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
-    Path(id): Path<i32>,
+    Path(user_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let user = user_app_service
-        .find(id)
+        .find(user_id)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 
@@ -61,11 +62,11 @@ pub async fn find<T: IUserRepository>(
 
 pub async fn update<T: IUserRepository>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
-    Path(id): Path<i32>,
+    Path(user_id): Path<Uuid>,
     ValidatedJson(payload): ValidatedJson<UpdateUser>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let user = user_app_service
-        .update(id, payload)
+        .update(user_id, payload)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 
@@ -74,10 +75,10 @@ pub async fn update<T: IUserRepository>(
 
 pub async fn delete<T: IUserRepository>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
-    Path(id): Path<i32>,
+    Path(user_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, StatusCode> {
     user_app_service
-        .delete(id)
+        .delete(user_id)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 

@@ -2,6 +2,7 @@ use blog_domain::model::articles::{
     article::{Article, NewArticle, UpdateArticle},
     i_article_repository::IArticleRepository,
 };
+use sqlx::types::Uuid;
 
 pub struct ArticleAppService<T: IArticleRepository> {
     repository: T,
@@ -12,7 +13,7 @@ impl<T: IArticleRepository> ArticleAppService<T> {
         Self { repository }
     }
 
-    pub async fn create(&self, user_id: i32, payload: NewArticle) -> anyhow::Result<Article> {
+    pub async fn create(&self, user_id: Uuid, payload: NewArticle) -> anyhow::Result<Article> {
         self.repository.create(user_id, payload).await
     }
 

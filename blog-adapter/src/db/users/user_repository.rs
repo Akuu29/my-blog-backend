@@ -4,6 +4,7 @@ use blog_domain::model::users::{
     i_user_repository::IUserRepository,
     user::{NewUser, UpdateUser, User},
 };
+use sqlx::types::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct UserRepository {
@@ -34,14 +35,15 @@ impl IUserRepository for UserRepository {
 
         Ok(user)
     }
-    async fn find(&self, id: i32) -> anyhow::Result<User> {
+
+    async fn find(&self, user_id: Uuid) -> anyhow::Result<User> {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT * FROM users
             WHERE id = $1;
             "#,
         )
-        .bind(id)
+        .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -67,8 +69,8 @@ impl IUserRepository for UserRepository {
         Ok(user)
     }
 
-    async fn update(&self, id: i32, payload: UpdateUser) -> anyhow::Result<User> {
-        let pre_user = self.find(id).await?;
+    async fn update(&self, user_id: Uuid, payload: UpdateUser) -> anyhow::Result<User> {
+        let pre_user = self.find(user_id).await?;
         let user = sqlx::query_as::<_, User>(
             r#"
             UPDATE users set name = $1, email = $2
@@ -78,20 +80,21 @@ impl IUserRepository for UserRepository {
         )
         .bind(payload.name.unwrap_or(pre_user.name))
         .bind(payload.email.unwrap_or(pre_user.email))
-        .bind(id)
+        .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
 
         Ok(user)
     }
-    async fn delete(&self, id: i32) -> anyhow::Result<()> {
+
+    async fn delete(&self, user_id: Uuid) -> anyhow::Result<()> {
         sqlx::query(
             r#"
             DELETE FROM users
             WHERE id = $1;
             "#,
         )
-        .bind(id)
+        .bind(user_id)
         .execute(&self.pool)
         .await
         .map_err(|e| match e {

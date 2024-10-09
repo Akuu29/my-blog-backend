@@ -1,6 +1,7 @@
 use crate::model::users::user::{User, UserRole};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use sqlx::types::Uuid;
 
 #[derive(Debug, Deserialize)]
 pub struct IdTokenClaims {
@@ -20,7 +21,7 @@ pub struct AccessTokenClaims {
     iat: usize,
     aud: String,
     iss: String,
-    pub sub: i32,
+    pub sub: Uuid,
     /// the time at which the token was valid
     nbf: usize,
     /// unique identifier for the token
@@ -57,7 +58,7 @@ pub struct RefreshTokenClaims {
     iat: usize,
     aud: String,
     iss: String,
-    sub: i32,
+    sub: Uuid,
 }
 
 impl RefreshTokenClaims {

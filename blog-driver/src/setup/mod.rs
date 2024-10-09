@@ -102,7 +102,7 @@ fn create_router<
     let users_router = Router::new()
         .route("/protected", post(create::<U, T>))
         .route(
-            "/:id",
+            "/:user_id",
             get(find::<U>).patch(update::<U>).delete(delete::<U>),
         );
 
