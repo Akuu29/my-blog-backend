@@ -78,7 +78,9 @@ impl RefreshTokenClaims {
 
 #[derive(Debug, Serialize)]
 pub struct ApiCredentials {
+    #[serde(rename = "accessToken")]
     access_token: String,
+    #[serde(rename = "refreshToken")]
     refresh_token: String,
 }
 
