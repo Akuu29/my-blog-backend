@@ -31,7 +31,7 @@ RUN cargo build --release --color never
 FROM debian:bookworm-slim AS stg
 
 RUN apt-get update &&\
-    apt install -y openssl &&\
+    apt install -y openssl ca-certificates &&\
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/local/bin
@@ -44,7 +44,7 @@ CMD ["blog-driver"]
 FROM debian:bookworm-slim AS prd
 
 RUN apt-get update &&\
-    apt install -y openssl &&\
+    apt install -y openssl ca-certificates &&\
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/local/bin
