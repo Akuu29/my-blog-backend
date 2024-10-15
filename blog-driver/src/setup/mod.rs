@@ -30,6 +30,7 @@ use blog_domain::model::{
     comments::i_comment_repository::ICommentRepository,
     tokens::i_token_repository::ITokenRepository, users::i_user_repository::IUserRepository,
 };
+use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use sqlx::PgPool;
 use std::{env, sync::Arc};
 use tower_http::cors::{Any, CorsLayer};
@@ -57,8 +58,9 @@ pub async fn create_server() {
     let token_app_service = TokenAppService::new(TokenRepository::new(client.clone()));
 
     let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST])
-        .allow_origin(Any);
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+        .allow_origin(Any)
+        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
     let router = create_router(
         cors,
