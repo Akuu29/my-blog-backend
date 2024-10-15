@@ -11,14 +11,14 @@ login-ghcr:
 	echo ${GHCR_PAT} | docker login ghcr.io -u ${GHCR_USER} --password-stdin
 
 build-%:
-	@$(if $(filter $*, dev),,$(error Invalid STAGE $*))
-	docker build --target ${@:build-%=%} -f Docker/rust/Dockerfile -t ghcr.io/${GHCR_USER}/my-blog-backend/${@:build-%=%}-my-blog-web-api:latest .
+	@$(if $(filter $*, dev stg),,$(error Invalid STAGE $*))
+	docker build --platform linux/amd64 --target ${*} -f Docker/rust/Dockerfile -t ghcr.io/${GHCR_USER}/my-blog-backend/${*}-my-blog-web-api:latest .
 
 push-%:
-	@$(if $(filter $*, dev),,$(error Invalid STAGE $*))
-	docker push ghcr.io/${GHCR_USER}/my-blog-backend/${@:push-%=%}-my-blog-web-api:latest
+	@$(if $(filter $*, stg),,$(error Invalid STAGE $*))
+	docker push ghcr.io/${GHCR_USER}/my-blog-backend/${*}-my-blog-web-api:latest
 
 deploy-%: login-ghcr
-	@$(if $(filter $*, dev),,$(error Invalid STAGE $*))
+	@$(if $(filter $*, stg),,$(error Invalid STAGE $*))
 	$(MAKE) build-$*
 	$(MAKE) push-$*
