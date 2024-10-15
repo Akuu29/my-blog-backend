@@ -22,14 +22,27 @@ impl IArticleRepository for ArticleRepository {
     async fn create(&self, user_id: Uuid, payload: NewArticle) -> anyhow::Result<Article> {
         let article = sqlx::query_as::<_, Article>(
             r#"
-            INSERT INTO articles (title, body, status, user_id)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO articles (
+                title,
+                body,
+                status,
+                category_id,
+                user_id
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5
+            )
             RETURNING *;
             "#,
         )
         .bind(payload.title)
         .bind(payload.body)
         .bind(payload.status)
+        .bind(payload.category_id.unwrap())
         .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
@@ -37,14 +50,22 @@ impl IArticleRepository for ArticleRepository {
         Ok(article)
     }
 
-    async fn find(&self, id: i32) -> anyhow::Result<Article> {
+    async fn find(&self, article_id: i32) -> anyhow::Result<Article> {
         let article = sqlx::query_as::<_, Article>(
             r#"
-            SELECT * FROM articles
+            SELECT
+                id,
+                title,
+                body,
+                status,
+                category_id,
+                created_at,
+                updated_at
+            FROM articles
             WHERE id = $1;
             "#,
         )
-        .bind(id)
+        .bind(article_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -54,7 +75,15 @@ impl IArticleRepository for ArticleRepository {
     async fn all(&self) -> anyhow::Result<Vec<Article>> {
         let articles = sqlx::query_as::<_, Article>(
             r#"
-            SELECT * FROM articles
+            SELECT
+                id,
+                title,
+                body,
+                status,
+                category_id,
+                created_at,
+                updated_at
+            FROM articles
             ORDER BY id DESC;
             "#,
         )
@@ -64,33 +93,43 @@ impl IArticleRepository for ArticleRepository {
         Ok(articles)
     }
 
-    async fn update(&self, id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
-        let pre_payload = self.find(id).await?;
+    async fn update(&self, article_id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
+        let pre_payload = self.find(article_id).await?;
         let article = sqlx::query_as::<_, Article>(
             r#"
-            UPDATE articles set title = $1, body = $2, status = $3, updated_at = now()
-            WHERE id = $4
+            UPDATE articles set
+                title = $1,
+                body = $2,
+                status = $3,
+                category_id = $4,
+                updated_at = now()
+            WHERE id = $5
             RETURNING *;
             "#,
         )
         .bind(payload.title.unwrap_or(pre_payload.title))
         .bind(payload.body.unwrap_or(pre_payload.body))
         .bind(payload.status.unwrap_or(pre_payload.status))
-        .bind(id)
+        .bind(
+            payload
+                .category_id
+                .unwrap_or(pre_payload.category_id.unwrap()),
+        )
+        .bind(article_id)
         .fetch_one(&self.pool)
         .await?;
 
         Ok(article)
     }
 
-    async fn delete(&self, id: i32) -> anyhow::Result<()> {
+    async fn delete(&self, article_id: i32) -> anyhow::Result<()> {
         sqlx::query(
             r#"
             DELETE FROM articles
             WHERE id = $1;
             "#,
         )
-        .bind(id)
+        .bind(article_id)
         .execute(&self.pool)
         .await
         .map_err(|e| match e {
@@ -123,6 +162,7 @@ mod test {
             title: "title".to_string(),
             body: "body".to_string(),
             status: ArticleStatus::Draft,
+            category_id: Some(1),
         };
 
         // create
@@ -149,6 +189,7 @@ mod test {
             title: Some("new title".to_string()),
             body: Some("new body".to_string()),
             status: Some(ArticleStatus::Published),
+            category_id: Some(2),
         };
         let article = repository
             .update(article.id, payload.clone())
@@ -209,6 +250,7 @@ pub mod test_util {
                 title: payload.title,
                 body: payload.body,
                 status: payload.status,
+                category_id: payload.category_id,
                 created_at: Local::now(),
                 updated_at: Local::now(),
             };
@@ -241,12 +283,14 @@ pub mod test_util {
             let title = payload.title.unwrap_or(article.title.clone());
             let body = payload.body.unwrap_or(article.body.clone());
             let status = payload.status.unwrap_or(article.status.clone());
+            let category_id = payload.category_id.unwrap_or(article.category_id.unwrap());
             let created_at = article.created_at.clone();
             let article = Article {
                 id,
                 title,
                 body,
                 status,
+                category_id: Some(category_id),
                 created_at,
                 updated_at: Local::now(),
             };
@@ -275,6 +319,7 @@ pub mod test_util {
             let payload = NewArticle {
                 title: "title".to_string(),
                 body: "body".to_string(),
+                category_id: Some(1),
                 status: ArticleStatus::Draft,
             };
 
@@ -302,6 +347,7 @@ pub mod test_util {
                 title: Some("new title".to_string()),
                 body: Some("new body".to_string()),
                 status: Some(ArticleStatus::Published),
+                category_id: Some(2),
             };
             let article = repository
                 .update(article.id, payload.clone())

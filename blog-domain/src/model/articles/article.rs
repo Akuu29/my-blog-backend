@@ -19,9 +19,12 @@ pub struct Article {
     pub title: String,
     pub body: String,
     pub status: ArticleStatus,
+    #[serde(rename = "categoryId")]
+    pub category_id: Option<i32>,
+    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Local>,
+    #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Local>,
-    // pub user_id: i32,
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -31,6 +34,8 @@ pub struct NewArticle {
     #[validate(length(min = 1, message = "body length mut be 1 or more"))]
     pub body: String,
     pub status: ArticleStatus,
+    #[serde(rename = "categoryId")]
+    pub category_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -40,4 +45,6 @@ pub struct UpdateArticle {
     #[validate(length(min = 1, message = "body length mut be 1 or more"))]
     pub body: Option<String>,
     pub status: Option<ArticleStatus>,
+    #[serde(rename = "categoryId")]
+    pub category_id: Option<i32>,
 }

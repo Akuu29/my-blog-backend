@@ -111,7 +111,7 @@ fn create_router<
     let articles_router = Router::new()
         .route("/", get(all_articles::<V>).post(create_article::<V, T>))
         .route(
-            "/:id",
+            "/:article_id",
             get(find_article::<V>)
                 .patch(update_article::<V, T>)
                 .delete(delete_article::<V, T>),

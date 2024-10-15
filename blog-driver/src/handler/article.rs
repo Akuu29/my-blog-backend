@@ -47,10 +47,10 @@ pub async fn create_article<T: IArticleRepository, U: ITokenRepository>(
 
 pub async fn find_article<T: IArticleRepository>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
-    Path(id): Path<i32>,
+    Path(article_id): Path<i32>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let article = article_app_service
-        .find(id)
+        .find(article_id)
         .await
         .or(Err(StatusCode::NOT_FOUND))?;
 
@@ -71,7 +71,7 @@ pub async fn all_articles<T: IArticleRepository>(
 pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
-    Path(id): Path<i32>,
+    Path(article_id): Path<i32>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
     ValidatedJson(payload): ValidatedJson<UpdateArticle>,
 ) -> Result<impl IntoResponse, StatusCode> {
@@ -85,7 +85,7 @@ pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
         })?;
 
     let article = article_app_service
-        .update(id, payload)
+        .update(article_id, payload)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 
@@ -96,7 +96,7 @@ pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
-    Path(id): Path<i32>,
+    Path(article_id): Path<i32>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let access_token = bearer.token().to_string();
     let _access_token_data = token_app_service
@@ -108,7 +108,7 @@ pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
         })?;
 
     article_app_service
-        .delete(id)
+        .delete(article_id)
         .await
         .map(|_| StatusCode::NO_CONTENT)
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
