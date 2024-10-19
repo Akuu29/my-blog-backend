@@ -1,18 +1,20 @@
 use crate::handler::{
     article::{all_articles, create_article, delete_article, find_article, update_article},
     auth::{signin, signup},
+    category::{all_categories, create_category, delete_category, update_category},
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
     token::verify_id_token,
     user::{create, delete, find, update},
 };
 use axum::{
     http::Method,
-    routing::{get, post},
+    routing::{get, patch, post},
     Extension, Router,
 };
 use blog_adapter::{
     db::{
         articles::article_repository::ArticleRepository,
+        categories::category_repository::CategoryRepository,
         comments::comment_repository::CommentRepository, users::user_repository::UserRepository,
     },
     idp::{auth::auth_repository::AuthRepository, tokens::token_repository::TokenRepository},
@@ -21,12 +23,14 @@ use blog_app::{
     model::auth::i_auth_repository::IAuthRepository,
     service::{
         articles::article_app_service::ArticleAppService, auth::auth_app_service::AuthAppService,
+        categories::category_app_service::CategoryAppService,
         comments::comment_app_service::CommentAppService,
         tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
     },
 };
 use blog_domain::model::{
     articles::i_article_repository::IArticleRepository,
+    categories::i_category_repository::ICategoryRepository,
     comments::i_comment_repository::ICommentRepository,
     tokens::i_token_repository::ITokenRepository, users::i_user_repository::IUserRepository,
 };
@@ -50,6 +54,7 @@ pub async fn create_server() {
     let article_app_service = ArticleAppService::new(ArticleRepository::new(pool.clone()));
     let comment_app_service = CommentAppService::new(CommentRepository::new(pool.clone()));
     let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
+    let category_app_service = CategoryAppService::new(CategoryRepository::new(pool.clone()));
 
     let client = reqwest::Client::new();
     let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
@@ -69,6 +74,7 @@ pub async fn create_server() {
         user_app_service,
         article_app_service,
         comment_app_service,
+        category_app_service,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
@@ -86,6 +92,7 @@ fn create_router<
     U: IUserRepository,
     V: IArticleRepository,
     W: ICommentRepository,
+    X: ICategoryRepository,
 >(
     cors_layer: CorsLayer,
     auth_app_service: AuthAppService<S>,
@@ -93,6 +100,7 @@ fn create_router<
     user_app_service: UserAppService<U>,
     article_app_service: ArticleAppService<V>,
     comment_app_service: CommentAppService<W>,
+    category_app_service: CategoryAppService<X>,
 ) -> Router {
     let auth_router = Router::new()
         .route("/signup", post(signup::<S>))
@@ -129,6 +137,14 @@ fn create_router<
         .route("/related/:article_id", get(find_by_article_id::<W>))
         .layer(Extension(Arc::new(comment_app_service)));
 
+    let category_router = Router::new()
+        .route("/", get(all_categories::<X>).post(create_category::<X, T>))
+        .route(
+            "/:category_id",
+            patch(update_category::<X, T>).delete(delete_category::<X, T>),
+        )
+        .layer(Extension(Arc::new(category_app_service)));
+
     Router::new()
         .route("/", get(root))
         .nest("/auth", auth_router)
@@ -136,6 +152,7 @@ fn create_router<
         .nest("/users", users_router)
         .nest("/articles", articles_router)
         .nest("/comments", comments_router)
+        .nest("/categories", category_router)
         .layer(Extension(Arc::new(token_app_service)))
         .layer(Extension(Arc::new(user_app_service)))
         .layer(cors_layer)

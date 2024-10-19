@@ -1,5 +1,6 @@
 pub mod article;
 pub mod auth;
+pub mod category;
 pub mod comment;
 pub mod token;
 pub mod user;
