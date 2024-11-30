@@ -8,9 +8,12 @@ use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
-use blog_app::service::{
-    categories::category_app_service::CategoryAppService,
-    tokens::token_app_service::TokenAppService,
+use blog_app::{
+    query_service::articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
+    service::{
+        categories::category_app_service::CategoryAppService,
+        tokens::token_app_service::TokenAppService,
+    },
 };
 use blog_domain::model::{
     categories::{
@@ -100,4 +103,16 @@ pub async fn delete_category<T: ICategoryRepository, U: ITokenRepository>(
         .or(Err(StatusCode::BAD_REQUEST))?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn find_articles_by_category<T: IArticlesByCategoryQueryService>(
+    Extension(articles_by_category_query_service): Extension<Arc<T>>,
+    Path(category_name): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let articles_by_category = articles_by_category_query_service
+        .find_article_title_by_category(category_name)
+        .await
+        .or(Err(StatusCode::BAD_REQUEST))?;
+
+    Ok((StatusCode::OK, Json(articles_by_category)))
 }

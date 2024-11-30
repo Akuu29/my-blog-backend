@@ -1,7 +1,10 @@
 use crate::handler::{
     article::{all_articles, create_article, delete_article, find_article, update_article},
     auth::{signin, signup},
-    category::{all_categories, create_category, delete_category, update_category},
+    category::{
+        all_categories, create_category, delete_category, find_articles_by_category,
+        update_category,
+    },
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
     token::verify_id_token,
     user::{create, delete, find, update},
@@ -18,9 +21,11 @@ use blog_adapter::{
         comments::comment_repository::CommentRepository, users::user_repository::UserRepository,
     },
     idp::{auth::auth_repository::AuthRepository, tokens::token_repository::TokenRepository},
+    query_service::articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
 };
 use blog_app::{
     model::auth::i_auth_repository::IAuthRepository,
+    query_service::articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
     service::{
         articles::article_app_service::ArticleAppService, auth::auth_app_service::AuthAppService,
         categories::category_app_service::CategoryAppService,
@@ -56,6 +61,8 @@ pub async fn create_server() {
     let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
     let category_app_service = CategoryAppService::new(CategoryRepository::new(pool.clone()));
 
+    let article_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
+
     let client = reqwest::Client::new();
     let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
     let auth_app_service =
@@ -75,6 +82,7 @@ pub async fn create_server() {
         article_app_service,
         comment_app_service,
         category_app_service,
+        article_by_category_query_service,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
@@ -93,6 +101,7 @@ fn create_router<
     V: IArticleRepository,
     W: ICommentRepository,
     X: ICategoryRepository,
+    Y: IArticlesByCategoryQueryService,
 >(
     cors_layer: CorsLayer,
     auth_app_service: AuthAppService<S>,
@@ -101,6 +110,7 @@ fn create_router<
     article_app_service: ArticleAppService<V>,
     comment_app_service: CommentAppService<W>,
     category_app_service: CategoryAppService<X>,
+    articles_by_category_query_service: Y,
 ) -> Router {
     let auth_router = Router::new()
         .route("/signup", post(signup::<S>))
@@ -143,7 +153,12 @@ fn create_router<
             "/:category_id",
             patch(update_category::<X, T>).delete(delete_category::<X, T>),
         )
-        .layer(Extension(Arc::new(category_app_service)));
+        .route(
+            "/:category_name/articles",
+            get(find_articles_by_category::<Y>),
+        )
+        .layer(Extension(Arc::new(category_app_service)))
+        .layer(Extension(Arc::new(articles_by_category_query_service)));
 
     Router::new()
         .route("/", get(root))
