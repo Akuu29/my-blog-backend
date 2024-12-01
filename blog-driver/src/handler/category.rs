@@ -1,6 +1,6 @@
 use crate::handler::ValidatedJson;
 use axum::{
-    extract::{Extension, Json, Path},
+    extract::{Extension, Json, Path, Query},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -17,7 +17,7 @@ use blog_app::{
 };
 use blog_domain::model::{
     categories::{
-        category::{NewCategory, UpdateCategory},
+        category::{CategoryFilter, NewCategory, UpdateCategory},
         i_category_repository::ICategoryRepository,
     },
     tokens::i_token_repository::ITokenRepository,
@@ -49,9 +49,10 @@ pub async fn create_category<T: ICategoryRepository, U: ITokenRepository>(
 
 pub async fn all_categories<T: ICategoryRepository>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
+    Query(category_filter): Query<CategoryFilter>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let categories = category_app_service
-        .all()
+        .all(category_filter)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 

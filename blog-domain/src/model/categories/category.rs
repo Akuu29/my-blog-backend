@@ -26,3 +26,9 @@ pub struct UpdateCategory {
     #[validate(length(min = 1, max = 20, message = "category length must be 1 to 20"))]
     pub name: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct CategoryFilter {
+    pub id: Option<i32>,
+    pub name: Option<String>,
+}

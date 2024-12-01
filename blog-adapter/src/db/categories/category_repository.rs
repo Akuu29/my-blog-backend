@@ -2,10 +2,10 @@ use crate::db::utils::RepositoryError;
 use anyhow::Ok;
 use async_trait::async_trait;
 use blog_domain::model::categories::{
-    category::{Category, NewCategory, UpdateCategory},
+    category::{Category, CategoryFilter, NewCategory, UpdateCategory},
     i_category_repository::ICategoryRepository,
 };
-use sqlx::types::Uuid;
+use sqlx::{query_builder::QueryBuilder, types::Uuid};
 
 #[derive(Clone)]
 pub struct CategoryRepository {
@@ -42,8 +42,8 @@ impl ICategoryRepository for CategoryRepository {
         Ok(category)
     }
 
-    async fn all(&self) -> anyhow::Result<Vec<Category>> {
-        let categories = sqlx::query_as::<_, Category>(
+    async fn all(&self, category_filter: CategoryFilter) -> anyhow::Result<Vec<Category>> {
+        let mut query = QueryBuilder::new(
             r#"
             SELECT
                 id,
@@ -51,11 +51,31 @@ impl ICategoryRepository for CategoryRepository {
                 created_at,
                 updated_at
             FROM categories
-            ORDER BY id;
             "#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        );
+
+        let mut conditions = vec![];
+
+        if category_filter.id.is_some() {
+            conditions.push("id = $1");
+        }
+
+        if category_filter.name.is_some() {
+            conditions.push("name = $2");
+        }
+
+        if !conditions.is_empty() {
+            query.push(" WHERE ").push(conditions.join(" AND "));
+        }
+
+        query.push(" ORDER BY id;");
+
+        let categories = query
+            .build_query_as::<Category>()
+            .bind(category_filter.id)
+            .bind(category_filter.name)
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(categories)
     }

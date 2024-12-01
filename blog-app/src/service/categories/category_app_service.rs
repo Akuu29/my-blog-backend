@@ -1,5 +1,5 @@
 use blog_domain::model::categories::{
-    category::{Category, NewCategory, UpdateCategory},
+    category::{Category, CategoryFilter, NewCategory, UpdateCategory},
     i_category_repository::ICategoryRepository,
 };
 use sqlx::types::Uuid;
@@ -17,8 +17,8 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
         self.repository.create(user_id, payload).await
     }
 
-    pub async fn all(&self) -> anyhow::Result<Vec<Category>> {
-        self.repository.all().await
+    pub async fn all(&self, category_filter: CategoryFilter) -> anyhow::Result<Vec<Category>> {
+        self.repository.all(category_filter).await
     }
 
     pub async fn update(
