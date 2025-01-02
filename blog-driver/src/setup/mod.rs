@@ -1,6 +1,5 @@
 use crate::handler::{
     article::{all_articles, create_article, delete_article, find_article, update_article},
-    auth::{signin, signup},
     category::{
         all_categories, create_category, delete_category, find_articles_by_category,
         update_category,
@@ -20,14 +19,13 @@ use blog_adapter::{
         categories::category_repository::CategoryRepository,
         comments::comment_repository::CommentRepository, users::user_repository::UserRepository,
     },
-    idp::{auth::auth_repository::AuthRepository, tokens::token_repository::TokenRepository},
+    idp::tokens::token_repository::TokenRepository,
     query_service::articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
 };
 use blog_app::{
-    model::auth::i_auth_repository::IAuthRepository,
     query_service::articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
     service::{
-        articles::article_app_service::ArticleAppService, auth::auth_app_service::AuthAppService,
+        articles::article_app_service::ArticleAppService,
         categories::category_app_service::CategoryAppService,
         comments::comment_app_service::CommentAppService,
         tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
@@ -64,9 +62,6 @@ pub async fn create_server() {
     let article_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
 
     let client = reqwest::Client::new();
-    let api_key = env::var("FIREBASE_API_KEY").expect("undefined FIREBASE_API_KEY");
-    let auth_app_service =
-        AuthAppService::new(AuthRepository::new(client.clone(), api_key.clone()));
     let token_app_service = TokenAppService::new(TokenRepository::new(client.clone()));
 
     let cors = CorsLayer::new()
@@ -76,7 +71,6 @@ pub async fn create_server() {
 
     let router = create_router(
         cors,
-        auth_app_service,
         token_app_service,
         user_app_service,
         article_app_service,
@@ -95,7 +89,6 @@ pub async fn create_server() {
 }
 
 fn create_router<
-    S: IAuthRepository,
     T: ITokenRepository,
     U: IUserRepository,
     V: IArticleRepository,
@@ -104,7 +97,6 @@ fn create_router<
     Y: IArticlesByCategoryQueryService,
 >(
     cors_layer: CorsLayer,
-    auth_app_service: AuthAppService<S>,
     token_app_service: TokenAppService<T>,
     user_app_service: UserAppService<U>,
     article_app_service: ArticleAppService<V>,
@@ -112,11 +104,6 @@ fn create_router<
     category_app_service: CategoryAppService<X>,
     articles_by_category_query_service: Y,
 ) -> Router {
-    let auth_router = Router::new()
-        .route("/signup", post(signup::<S>))
-        .route("/signin", post(signin::<S>))
-        .layer(Extension(Arc::new(auth_app_service)));
-
     let token_router = Router::new().route("/verify", get(verify_id_token::<T, U>));
 
     let users_router = Router::new()
@@ -162,7 +149,6 @@ fn create_router<
 
     Router::new()
         .route("/", get(root))
-        .nest("/auth", auth_router)
         .nest("/token", token_router)
         .nest("/users", users_router)
         .nest("/articles", articles_router)
