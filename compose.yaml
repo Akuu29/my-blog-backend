@@ -1,0 +1,34 @@
+services:
+  nginx:
+    build:
+      context: ./local/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - my-blog-network
+    depends_on:
+      - webapi
+
+  webapi:
+    container_name: my-blog-backend-webapi
+    build:
+      context: .
+      dockerfile: ./local/webapi/Dockerfile
+    expose:
+      - "8000"
+    networks:
+      - my-blog-network
+    volumes:
+      - ./blog-driver:/usr/src/app/blog-driver
+      - ./blog-domain:/usr/src/app/blog-domain
+      - ./blog-app:/usr/src/app/blog-app
+      - ./blog-adapter:/usr/src/app/blog-adapter
+      - ./Cargo.toml:/usr/src/app/Cargo.toml
+    env_file:
+      - .env
+    environment:
+      - RUST_LOG=debug
+networks:
+  my-blog-network:
+    external: true

@@ -1,11 +1,9 @@
-.PHONY: dev local-container-run login-ghcr build-% push-% deploy-%
+.PHONY: run-local-container login-ghcr build-% push-% deploy-%
 
-dev:
-	cargo watch -x run
-
-local-container-run:
-	docker build --target stg -f Docker/rust/Dockerfile -t local-my-blog-backend .
-	docker run --network my-blog-migration-tools_default -p 8080:80 --env-file .env local-my-blog-backend
+run-local-container:
+	docker network create my-blog-network || true
+	docker compose build
+	docker compose up
 
 login-ghcr:
 	echo ${GHCR_PAT} | docker login ghcr.io -u ${GHCR_USER} --password-stdin
