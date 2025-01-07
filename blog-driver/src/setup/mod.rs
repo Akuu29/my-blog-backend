@@ -13,6 +13,7 @@ use axum::{
     routing::{get, patch, post},
     Extension, Router,
 };
+use axum_extra::extract::cookie::Key;
 use blog_adapter::{
     db::{
         articles::article_repository::ArticleRepository,
@@ -42,6 +43,9 @@ use sqlx::PgPool;
 use std::{env, sync::Arc};
 use tower_http::cors::{Any, CorsLayer};
 
+mod app_state;
+use app_state::AppState;
+
 pub async fn create_server() {
     let log_level = env::var("RUST_LOG").unwrap_or("info".to_string());
     env::set_var("RUST_LOG", log_level);
@@ -69,8 +73,11 @@ pub async fn create_server() {
         .allow_origin(Any)
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
+    let app_state = AppState::new(Key::generate());
+
     let router = create_router(
         cors,
+        app_state,
         token_app_service,
         user_app_service,
         article_app_service,
@@ -97,6 +104,7 @@ fn create_router<
     Y: IArticlesByCategoryQueryService,
 >(
     cors_layer: CorsLayer,
+    app_state: AppState,
     token_app_service: TokenAppService<T>,
     user_app_service: UserAppService<U>,
     article_app_service: ArticleAppService<V>,
@@ -157,6 +165,7 @@ fn create_router<
         .layer(Extension(Arc::new(token_app_service)))
         .layer(Extension(Arc::new(user_app_service)))
         .layer(cors_layer)
+        .with_state(app_state)
 }
 
 async fn root() -> &'static str {
