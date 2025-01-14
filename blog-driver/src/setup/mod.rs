@@ -5,7 +5,7 @@ use crate::handler::{
         update_category,
     },
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
-    token::verify_id_token,
+    token::{refresh_access_token, verify_id_token},
     user::{create, delete, find, update},
 };
 use axum::{
@@ -112,7 +112,9 @@ fn create_router<
     category_app_service: CategoryAppService<X>,
     articles_by_category_query_service: Y,
 ) -> Router {
-    let token_router = Router::new().route("/verify", get(verify_id_token::<T, U>));
+    let token_router = Router::new()
+        .route("/verify", get(verify_id_token::<T, U>))
+        .route("/refresh-access-token", get(refresh_access_token::<T, U>));
 
     let users_router = Router::new()
         .route("/protected", post(create::<U, T>))

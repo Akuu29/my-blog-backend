@@ -2,7 +2,7 @@ use crate::service::tokens::token_service::TokenService;
 use blog_domain::model::{
     tokens::{
         i_token_repository::ITokenRepository,
-        token::{AccessTokenClaims, IdTokenClaims},
+        token::{AccessTokenClaims, IdTokenClaims, RefreshTokenClaims},
     },
     users::user::User,
 };
@@ -57,7 +57,11 @@ impl<T: ITokenRepository> TokenAppService<T> {
         self.service.verify_access_token(id_token)
     }
 
-        todo!()
+    pub fn verify_refresh_token(
+        &self,
+        refresh_token: &str,
+    ) -> anyhow::Result<TokenData<RefreshTokenClaims>> {
+        self.service.verify_refresh_token(refresh_token)
     }
 
     pub fn generate_access_token(&self, user: &User) -> anyhow::Result<String> {
@@ -66,9 +70,5 @@ impl<T: ITokenRepository> TokenAppService<T> {
 
     pub fn generate_refresh_token(&self, user: &User) -> anyhow::Result<String> {
         self.service.generate_refresh_token(&user)
-    }
-
-    fn refresh_access_token(&self, token: &str) -> anyhow::Result<()> {
-        todo!()
     }
 }

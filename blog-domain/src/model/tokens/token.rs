@@ -74,21 +74,22 @@ impl RefreshTokenClaims {
             sub: user.id,
         }
     }
+
+    pub fn sub(&self) -> Uuid {
+        self.sub
+    }
 }
 
 #[derive(Debug, Serialize)]
 pub struct ApiCredentials {
     #[serde(rename = "accessToken")]
     access_token: String,
-    #[serde(rename = "refreshToken")]
-    refresh_token: String,
 }
 
 impl ApiCredentials {
-    pub fn new(access_token: &str, refresh_token: &str) -> Self {
+    pub fn new(access_token: &str) -> Self {
         Self {
             access_token: access_token.to_string(),
-            refresh_token: refresh_token.to_string(),
         }
     }
 }

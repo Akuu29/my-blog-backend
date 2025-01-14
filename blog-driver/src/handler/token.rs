@@ -1,5 +1,7 @@
+use crate::model::api_response::ApiResponse;
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use axum_extra::{
+    extract::cookie::{Cookie, PrivateCookieJar, SameSite},
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
@@ -11,12 +13,14 @@ use blog_domain::model::{
     tokens::{i_token_repository::ITokenRepository, token::ApiCredentials},
     users::{i_user_repository::IUserRepository, user::NewUser},
 };
+use cookie::time::Duration;
 use std::sync::Arc;
 
 pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
     Extension(token_app_service): Extension<Arc<TokenAppService<S>>>,
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    jar: PrivateCookieJar,
 ) -> Result<impl IntoResponse, StatusCode> {
     let id_token = bearer.token().to_string();
     let id_token_data = token_app_service
@@ -31,14 +35,22 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
             let access_token = token_app_service
                 .generate_access_token(&user)
                 .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+            let api_credentials = ApiCredentials::new(&access_token);
 
             let refresh_token = token_app_service
                 .generate_refresh_token(&user)
                 .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+            let cookie = Cookie::build(("refresh_token", refresh_token))
+                .http_only(true)
+                .max_age(Duration::days(30))
+                .path("/")
+                .same_site(SameSite::None)
+                .secure(true);
+            let updated_jar = jar.add(cookie);
 
-            let api_credentials = ApiCredentials::new(&access_token, &refresh_token);
+            let response = ApiResponse::new(StatusCode::OK, api_credentials, Some(updated_jar));
 
-            Ok((StatusCode::OK, Json(api_credentials)))
+            Ok(response)
         }
         Err(e) => match e.downcast_ref::<RepositoryError>() {
             Some(RepositoryError::NotFound) => {
@@ -52,13 +64,55 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
                     .generate_access_token(&user)
                     .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
 
+                let api_credentials = ApiCredentials::new(&access_token);
+
                 let refresh_token = token_app_service
                     .generate_refresh_token(&user)
                     .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+                let cookie = Cookie::build(("refresh_token", refresh_token))
+                    .http_only(true)
+                    .max_age(Duration::days(30))
+                    .path("/")
+                    .same_site(SameSite::None)
+                    .secure(true);
+                let updated_jar = jar.add(cookie);
 
-                let api_credentials = ApiCredentials::new(&access_token, &refresh_token);
+                let response = ApiResponse::new(StatusCode::OK, api_credentials, Some(updated_jar));
 
-                return Ok((StatusCode::OK, Json(api_credentials)));
+                Ok(response)
+            }
+            _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        },
+    }
+}
+
+pub async fn refresh_access_token<S: ITokenRepository, T: IUserRepository>(
+    Extension(token_app_service): Extension<Arc<TokenAppService<S>>>,
+    Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+    jar: PrivateCookieJar,
+) -> Result<impl IntoResponse, StatusCode> {
+    let refresh_token = match jar.get("refresh_token") {
+        Some(refresh_token) => refresh_token.to_string(),
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    let token_data = token_app_service
+        .verify_refresh_token(&refresh_token)
+        .or(Err(StatusCode::BAD_REQUEST))?;
+
+    let exists_user = user_app_service.find(token_data.claims.sub()).await;
+    match exists_user {
+        Ok(user) => {
+            let access_token = token_app_service
+                .generate_access_token(&user)
+                .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+            let api_credentials = ApiCredentials::new(&access_token);
+
+            Ok((StatusCode::OK, Json(api_credentials)))
+        }
+        Err(e) => match e.downcast_ref::<RepositoryError>() {
+            Some(RepositoryError::NotFound) => {
+                return Err(StatusCode::BAD_REQUEST);
             }
             _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
         },
