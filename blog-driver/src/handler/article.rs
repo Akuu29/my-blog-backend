@@ -38,7 +38,7 @@ pub async fn create_article<T: IArticleRepository, U: ITokenRepository>(
         })?;
 
     let article = article_app_service
-        .create(access_token_data.claims.sub, payload)
+        .create(access_token_data.claims.sub(), payload)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 

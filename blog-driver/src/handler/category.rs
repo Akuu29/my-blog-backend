@@ -40,7 +40,7 @@ pub async fn create_category<T: ICategoryRepository, U: ITokenRepository>(
         })?;
 
     let category = category_app_service
-        .create(access_token_data.claims.sub, payload)
+        .create(access_token_data.claims.sub(), payload)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 

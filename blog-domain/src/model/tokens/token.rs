@@ -21,7 +21,7 @@ pub struct AccessTokenClaims {
     iat: usize,
     aud: String,
     iss: String,
-    pub sub: Uuid,
+    sub: Uuid,
     /// the time at which the token was valid
     nbf: usize,
     /// unique identifier for the token
@@ -47,8 +47,8 @@ impl AccessTokenClaims {
         }
     }
 
-    pub fn sub(&self) -> String {
-        self.sub.to_string()
+    pub fn sub(&self) -> Uuid {
+        self.sub
     }
 }
 

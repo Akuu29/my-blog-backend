@@ -54,29 +54,9 @@ impl<T: ITokenRepository> TokenAppService<T> {
         &self,
         id_token: &str,
     ) -> anyhow::Result<TokenData<AccessTokenClaims>> {
-        let secret_key =
-            std::env::var("ACCESS_TOKEN_SECRET_KEY").expect("undefined ACCESS_TOKEN_SECRET_KEY");
-        let decoding_key = DecodingKey::from_secret(secret_key.as_bytes());
-        let validation = {
-            let mut validation = Validation::new(Algorithm::HS256);
-            let audience = std::env::var("AUDIENCE").expect("undefined AUDIENCE");
-            validation.set_audience(&[audience]);
-            let issuer = std::env::var("ISSUER").expect("undefined ISSUER");
-            validation.set_issuer(&[issuer]);
-            validation
-        };
-
-        let token_data =
-            jsonwebtoken::decode::<AccessTokenClaims>(id_token, &decoding_key, &validation)
-                .map_err(|e| match e.into_kind() {
-                    errors::ErrorKind::ExpiredSignature => anyhow::anyhow!("expired signature"),
-                    _ => anyhow::anyhow!("Unknown error"),
-                });
-
-        token_data
+        self.service.verify_access_token(id_token)
     }
 
-    fn verify_refresh_token(&self, refresh_token: &str) -> anyhow::Result<()> {
         todo!()
     }
 
