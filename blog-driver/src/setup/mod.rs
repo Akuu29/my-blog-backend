@@ -38,10 +38,13 @@ use blog_domain::model::{
     comments::i_comment_repository::ICommentRepository,
     tokens::i_token_repository::ITokenRepository, users::i_user_repository::IUserRepository,
 };
-use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
+use http::{
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE},
+    HeaderValue,
+};
 use sqlx::PgPool;
 use std::{env, sync::Arc};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 mod app_state;
 use app_state::AppState;
@@ -68,10 +71,12 @@ pub async fn create_server() {
     let client = reqwest::Client::new();
     let token_app_service = TokenAppService::new(TokenRepository::new(client.clone()));
 
+    let client_addr = env::var("CLIENT_ADDR").expect("undefined CLIENT_ADDR");
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
-        .allow_origin(Any)
-        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
+        .allow_origin(client_addr.parse::<HeaderValue>().unwrap())
+        .allow_credentials(true)
+        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE, COOKIE]);
 
     let app_state = AppState::new(Key::generate());
 
