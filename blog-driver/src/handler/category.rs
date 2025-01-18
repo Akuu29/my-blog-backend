@@ -1,12 +1,8 @@
-use crate::handler::ValidatedJson;
+use crate::{handler::ValidatedJson, model::auth_token::AuthToken};
 use axum::{
     extract::{Extension, Json, Path, Query},
     http::StatusCode,
     response::IntoResponse,
-};
-use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
 };
 use blog_app::{
     query_service::articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
@@ -20,19 +16,18 @@ use blog_domain::model::{
         category::{CategoryFilter, NewCategory, UpdateCategory},
         i_category_repository::ICategoryRepository,
     },
-    tokens::i_token_repository::ITokenRepository,
+    tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
 use std::sync::Arc;
 
 pub async fn create_category<T: ICategoryRepository, U: ITokenRepository>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewCategory>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let access_token = bearer.token().to_string();
     let access_token_data = token_app_service
-        .verify_access_token(&access_token)
+        .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
@@ -62,13 +57,12 @@ pub async fn all_categories<T: ICategoryRepository>(
 pub async fn update_category<T: ICategoryRepository, U: ITokenRepository>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
     Path(category_id): Path<i32>,
     ValidatedJson(payload): ValidatedJson<UpdateCategory>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let access_token = bearer.token().to_string();
     let _access_token_data = token_app_service
-        .verify_access_token(&access_token)
+        .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
@@ -86,12 +80,11 @@ pub async fn update_category<T: ICategoryRepository, U: ITokenRepository>(
 pub async fn delete_category<T: ICategoryRepository, U: ITokenRepository>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
     Path(category_id): Path<i32>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let access_token = bearer.token().to_string();
     let _access_token_data = token_app_service
-        .verify_access_token(&access_token)
+        .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);

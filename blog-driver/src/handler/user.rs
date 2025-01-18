@@ -1,18 +1,14 @@
-use crate::handler::ValidatedJson;
+use crate::{handler::ValidatedJson, model::auth_token::AuthToken};
 use axum::{
     extract::{Extension, Json, Path},
     http::StatusCode,
     response::IntoResponse,
 };
-use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
-};
 use blog_app::service::{
     tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
 };
 use blog_domain::model::{
-    tokens::i_token_repository::ITokenRepository,
+    tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
     users::{
         i_user_repository::IUserRepository,
         user::{NewUser, UpdateUser, UserRole},
@@ -24,12 +20,11 @@ use std::sync::Arc;
 pub async fn create<T: IUserRepository, U: ITokenRepository>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewUser>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let access_token = bearer.token().to_string();
     let access_token_data = token_app_service
-        .verify_access_token(&access_token)
+        .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("Failed to verify access token: {:?}", e);

@@ -1,5 +1,8 @@
 use blog_domain::model::{
-    tokens::token::{AccessTokenClaims, RefreshTokenClaims},
+    tokens::{
+        token::{AccessTokenClaims, RefreshTokenClaims},
+        token_string::{AccessTokenString, RefreshTokenString, TokenString},
+    },
     users::user::User,
 };
 use jsonwebtoken::{errors, Algorithm, DecodingKey, EncodingKey, TokenData, Validation};
@@ -41,7 +44,7 @@ impl TokenService {
 
     pub fn verify_access_token(
         &self,
-        id_token: &str,
+        token: AccessTokenString,
     ) -> anyhow::Result<TokenData<AccessTokenClaims>> {
         let secret_key =
             std::env::var("ACCESS_TOKEN_SECRET_KEY").expect("undefined ACCESS_TOKEN_SECRET_KEY");
@@ -56,7 +59,7 @@ impl TokenService {
         };
 
         let token_data =
-            jsonwebtoken::decode::<AccessTokenClaims>(id_token, &decoding_key, &validation)
+            jsonwebtoken::decode::<AccessTokenClaims>(token.str(), &decoding_key, &validation)
                 .map_err(|e| match e.into_kind() {
                     errors::ErrorKind::ExpiredSignature => anyhow::anyhow!("expired signature"),
                     _ => anyhow::anyhow!("Unknown error"),
@@ -67,7 +70,7 @@ impl TokenService {
 
     pub fn verify_refresh_token(
         &self,
-        refresh_token: &str,
+        token: RefreshTokenString,
     ) -> anyhow::Result<TokenData<RefreshTokenClaims>> {
         let secret_key =
             std::env::var("REFRESH_TOKEN_SECRET_KEY").expect("undefined REFFRESH_TOKEN_SECRET_KEY");
@@ -82,7 +85,7 @@ impl TokenService {
         };
 
         let token_data =
-            jsonwebtoken::decode::<RefreshTokenClaims>(refresh_token, &decoding_key, &validation)
+            jsonwebtoken::decode::<RefreshTokenClaims>(token.str(), &decoding_key, &validation)
                 .map_err(|e| match e.into_kind() {
                     errors::ErrorKind::ExpiredSignature => anyhow::anyhow!("expired signature"),
                     _ => anyhow::anyhow!("Unknown error"),

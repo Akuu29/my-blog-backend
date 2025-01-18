@@ -3,6 +3,7 @@ use blog_domain::model::{
     tokens::{
         i_token_repository::ITokenRepository,
         token::{AccessTokenClaims, IdTokenClaims, RefreshTokenClaims},
+        token_string::{AccessTokenString, IdTokenString, RefreshTokenString, TokenString},
     },
     users::user::User,
 };
@@ -21,10 +22,13 @@ impl<T: ITokenRepository> TokenAppService<T> {
         }
     }
 
-    pub async fn verify_id_token(&self, token: &str) -> anyhow::Result<TokenData<IdTokenClaims>> {
+    pub async fn verify_id_token(
+        &self,
+        token: IdTokenString,
+    ) -> anyhow::Result<TokenData<IdTokenClaims>> {
         let jwks = self.repository.fetch_jwks().await?;
 
-        let token_header = jsonwebtoken::decode_header(token)?;
+        let token_header = jsonwebtoken::decode_header(token.str())?;
 
         let kid = token_header.kid.unwrap();
         let pem = jwks.get(&kid).unwrap();
@@ -40,28 +44,29 @@ impl<T: ITokenRepository> TokenAppService<T> {
             validation
         };
 
-        let token_data = jsonwebtoken::decode::<IdTokenClaims>(token, &decoding_key, &validation)
-            .map_err(|e| match e.into_kind() {
-                errors::ErrorKind::ExpiredSignature => anyhow::anyhow!("expired signature"),
-                _ => anyhow::anyhow!("Unknown error"),
-            })
-            .unwrap();
+        let token_data =
+            jsonwebtoken::decode::<IdTokenClaims>(token.str(), &decoding_key, &validation)
+                .map_err(|e| match e.into_kind() {
+                    errors::ErrorKind::ExpiredSignature => anyhow::anyhow!("expired signature"),
+                    _ => anyhow::anyhow!("Unknown error"),
+                })
+                .unwrap();
 
         Ok(token_data)
     }
 
     pub async fn verify_access_token(
         &self,
-        id_token: &str,
+        token: AccessTokenString,
     ) -> anyhow::Result<TokenData<AccessTokenClaims>> {
-        self.service.verify_access_token(id_token)
+        self.service.verify_access_token(token)
     }
 
     pub fn verify_refresh_token(
         &self,
-        refresh_token: &str,
+        token: RefreshTokenString,
     ) -> anyhow::Result<TokenData<RefreshTokenClaims>> {
-        self.service.verify_refresh_token(refresh_token)
+        self.service.verify_refresh_token(token)
     }
 
     pub fn generate_access_token(&self, user: &User) -> anyhow::Result<String> {

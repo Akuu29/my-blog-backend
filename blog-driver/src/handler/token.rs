@@ -1,16 +1,16 @@
-use crate::model::api_response::ApiResponse;
+use crate::model::{api_response::ApiResponse, auth_token::AuthToken};
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
-use axum_extra::{
-    extract::cookie::{Cookie, PrivateCookieJar, SameSite},
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
-};
+use axum_extra::extract::cookie::{Cookie, PrivateCookieJar, SameSite};
 use blog_adapter::db::utils::RepositoryError;
 use blog_app::service::{
     tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
 };
 use blog_domain::model::{
-    tokens::{i_token_repository::ITokenRepository, token::ApiCredentials},
+    tokens::{
+        i_token_repository::ITokenRepository,
+        token::ApiCredentials,
+        token_string::{IdTokenString, RefreshTokenString},
+    },
     users::{i_user_repository::IUserRepository, user::NewUser},
 };
 use cookie::time::Duration;
@@ -19,12 +19,11 @@ use std::sync::Arc;
 pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
     Extension(token_app_service): Extension<Arc<TokenAppService<S>>>,
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
-    TypedHeader(Authorization(bearer)): TypedHeader<Authorization<Bearer>>,
+    AuthToken(token): AuthToken<IdTokenString>,
     jar: PrivateCookieJar,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let id_token = bearer.token().to_string();
     let id_token_data = token_app_service
-        .verify_id_token(&id_token)
+        .verify_id_token(token)
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
     let id_token_claims = id_token_data.claims;
@@ -92,12 +91,12 @@ pub async fn refresh_access_token<S: ITokenRepository, T: IUserRepository>(
     jar: PrivateCookieJar,
 ) -> Result<impl IntoResponse, StatusCode> {
     let refresh_token = match jar.get("refresh_token") {
-        Some(refresh_token) => refresh_token.to_string(),
+        Some(refresh_token) => RefreshTokenString(refresh_token.to_string()),
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
     let token_data = token_app_service
-        .verify_refresh_token(&refresh_token)
+        .verify_refresh_token(refresh_token)
         .or(Err(StatusCode::BAD_REQUEST))?;
 
     let exists_user = user_app_service.find(token_data.claims.sub()).await;
