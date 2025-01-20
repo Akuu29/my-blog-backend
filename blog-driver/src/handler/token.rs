@@ -28,7 +28,9 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
         .or(Err(StatusCode::BAD_REQUEST))?;
     let id_token_claims = id_token_data.claims;
 
-    let exists_user = user_app_service.find_by_idp_sub(&id_token_claims.sub).await;
+    let exists_user = user_app_service
+        .find_by_idp_sub(&id_token_claims.sub())
+        .await;
     match exists_user {
         Ok(user) => {
             let access_token = token_app_service
@@ -53,7 +55,8 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
         }
         Err(e) => match e.downcast_ref::<RepositoryError>() {
             Some(RepositoryError::NotFound) => {
-                let new_user = NewUser::default().new(&id_token_claims.email, &id_token_claims.sub);
+                let new_user =
+                    NewUser::default().new(&id_token_claims.email(), &id_token_claims.sub());
                 let user = user_app_service
                     .create(new_user)
                     .await

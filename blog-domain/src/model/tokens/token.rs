@@ -3,16 +3,26 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct IdTokenClaims {
     exp: usize,
     iat: usize,
     aud: String,
     iss: String,
-    pub sub: String,
+    sub: String,
     auth_time: usize,
     user_id: String,
-    pub email: String,
+    email: String,
+}
+
+impl IdTokenClaims {
+    pub fn sub(&self) -> String {
+        self.sub.clone()
+    }
+    pub fn email(&self) -> String {
+        self.email.clone()
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
