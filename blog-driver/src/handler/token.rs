@@ -41,7 +41,8 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
             let refresh_token = token_app_service
                 .generate_refresh_token(&user)
                 .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
-            let cookie = Cookie::build(("refresh_token", refresh_token))
+            let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
+            let cookie = Cookie::build(("refresh_token", url_encoded_refresh_token))
                 .http_only(true)
                 .max_age(Duration::days(30))
                 .path("/")
@@ -71,7 +72,8 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
                 let refresh_token = token_app_service
                     .generate_refresh_token(&user)
                     .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
-                let cookie = Cookie::build(("refresh_token", refresh_token))
+                let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
+                let cookie = Cookie::build(("refresh_token", url_encoded_refresh_token))
                     .http_only(true)
                     .max_age(Duration::days(30))
                     .path("/")
@@ -94,7 +96,10 @@ pub async fn refresh_access_token<S: ITokenRepository, T: IUserRepository>(
     jar: PrivateCookieJar,
 ) -> Result<impl IntoResponse, StatusCode> {
     let refresh_token = match jar.get("refresh_token") {
-        Some(refresh_token) => RefreshTokenString(refresh_token.to_string()),
+        Some(refresh_token) => {
+            let refresh_token = urlencoding::decode(refresh_token.value()).expect("decode error");
+            RefreshTokenString(refresh_token.to_string())
+        }
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
