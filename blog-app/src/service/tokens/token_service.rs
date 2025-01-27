@@ -73,7 +73,7 @@ impl TokenService {
         token: RefreshTokenString,
     ) -> anyhow::Result<TokenData<RefreshTokenClaims>> {
         let secret_key =
-            std::env::var("REFRESH_TOKEN_SECRET_KEY").expect("undefined REFFRESH_TOKEN_SECRET_KEY");
+            std::env::var("REFRESH_TOKEN_SECRET_KEY").expect("undefined REFRESH_TOKEN_SECRET_KEY");
         let decoding_key = DecodingKey::from_secret(secret_key.as_bytes());
         let validation = {
             let mut validation = Validation::new(Algorithm::HS256);

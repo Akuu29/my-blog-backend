@@ -1,4 +1,8 @@
-.PHONY: run-local-container login-ghcr build-% push-% deploy-%
+.PHONY: dev run-local-container login-ghcr build-% push-% deploy-%
+
+dev:
+	export RUST_LOG=debug
+	cargo watch -x run
 
 run-local-container:
 	docker network create my-blog-network || true

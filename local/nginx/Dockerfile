@@ -2,8 +2,8 @@ FROM nginx:alpine
 
 RUN apk add --no-cache bash
 
-COPY ./ssl/localhost.crt /etc/ssl/certs/localhost.crt
-COPY ./ssl/localhost.key /etc/ssl/private/localhost.key
+COPY ./ssl/localhost.pem /etc/ssl/certs/localhost.pem
+COPY ./ssl/localhost-key.pem /etc/ssl/private/localhost-key.pem
 
 COPY nginx.conf /etc/nginx/nginx.conf
 

@@ -1,4 +1,11 @@
-FROM rust:latest
+FROM rust:1.83
+
+# ARG MOLD_VERSION=2.36.0
+# RUN ARCH=$(uname -m) \
+#     && curl -L -O https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-${ARCH}-linux.tar.gz \
+#     && tar xf mold-* && \
+#     cp -p mold-*/bin/* /usr/local/bin/ && \
+#     rm -rf mold-*
 
 WORKDIR /usr/src/app
 

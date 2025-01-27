@@ -119,7 +119,7 @@ fn create_router<
 ) -> Router {
     let token_router = Router::new()
         .route("/verify", get(verify_id_token::<T, U>))
-        .route("/refresh-access-token", get(refresh_access_token::<T, U>));
+        .route("/refresh", get(refresh_access_token::<T, U>));
 
     let users_router = Router::new()
         .route("/protected", post(create::<U, T>))
