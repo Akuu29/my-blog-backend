@@ -1,5 +1,6 @@
 pub mod articles;
 pub mod categories;
 pub mod comments;
+pub mod tags;
 pub mod tokens;
 pub mod users;

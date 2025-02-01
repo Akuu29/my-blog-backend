@@ -5,12 +5,13 @@ use crate::handler::{
         update_category,
     },
     comment::{create_comment, delete_comment, find_by_article_id, find_comment, update_comment},
+    tag,
     token::{refresh_access_token, verify_id_token},
-    user::{create, delete, find, update},
+    user,
 };
 use axum::{
     http::Method,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Extension, Router,
 };
 use axum_extra::extract::cookie::Key;
@@ -18,7 +19,8 @@ use blog_adapter::{
     db::{
         articles::article_repository::ArticleRepository,
         categories::category_repository::CategoryRepository,
-        comments::comment_repository::CommentRepository, users::user_repository::UserRepository,
+        comments::comment_repository::CommentRepository, tags::tag_repository::TagRepository,
+        users::user_repository::UserRepository,
     },
     idp::tokens::token_repository::TokenRepository,
     query_service::articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
@@ -28,14 +30,14 @@ use blog_app::{
     service::{
         articles::article_app_service::ArticleAppService,
         categories::category_app_service::CategoryAppService,
-        comments::comment_app_service::CommentAppService,
+        comments::comment_app_service::CommentAppService, tags::tag_app_service::TagAppService,
         tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
     },
 };
 use blog_domain::model::{
     articles::i_article_repository::IArticleRepository,
     categories::i_category_repository::ICategoryRepository,
-    comments::i_comment_repository::ICommentRepository,
+    comments::i_comment_repository::ICommentRepository, tags::i_tag_repository::ITagRepository,
     tokens::i_token_repository::ITokenRepository, users::i_user_repository::IUserRepository,
 };
 use http::{
@@ -65,6 +67,7 @@ pub async fn create_server() {
     let comment_app_service = CommentAppService::new(CommentRepository::new(pool.clone()));
     let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
     let category_app_service = CategoryAppService::new(CategoryRepository::new(pool.clone()));
+    let tag_app_service = TagAppService::new(TagRepository::new(pool.clone()));
 
     let article_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
 
@@ -89,6 +92,7 @@ pub async fn create_server() {
         comment_app_service,
         category_app_service,
         article_by_category_query_service,
+        tag_app_service,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
@@ -107,6 +111,7 @@ fn create_router<
     W: ICommentRepository,
     X: ICategoryRepository,
     Y: IArticlesByCategoryQueryService,
+    Z: ITagRepository,
 >(
     cors_layer: CorsLayer,
     app_state: AppState,
@@ -116,16 +121,19 @@ fn create_router<
     comment_app_service: CommentAppService<W>,
     category_app_service: CategoryAppService<X>,
     articles_by_category_query_service: Y,
+    tag_app_service: TagAppService<Z>,
 ) -> Router {
     let token_router = Router::new()
         .route("/verify", get(verify_id_token::<T, U>))
         .route("/refresh", get(refresh_access_token::<T, U>));
 
     let users_router = Router::new()
-        .route("/protected", post(create::<U, T>))
+        .route("/protected", post(user::create::<U, T>))
         .route(
             "/:user_id",
-            get(find::<U>).patch(update::<U>).delete(delete::<U>),
+            get(user::find::<U>)
+                .patch(user::update::<U>)
+                .delete(user::delete::<U>),
         );
 
     let articles_router = Router::new()
@@ -162,6 +170,11 @@ fn create_router<
         .layer(Extension(Arc::new(category_app_service)))
         .layer(Extension(Arc::new(articles_by_category_query_service)));
 
+    let tag_router = Router::new()
+        .route("/", post(tag::create::<Z, T>).get(tag::all::<Z>))
+        .route("/:tag_id", delete(tag::delete::<Z, T>))
+        .layer(Extension(Arc::new(tag_app_service)));
+
     Router::new()
         .route("/", get(root))
         .nest("/token", token_router)
@@ -169,6 +182,7 @@ fn create_router<
         .nest("/articles", articles_router)
         .nest("/comments", comments_router)
         .nest("/categories", category_router)
+        .nest("/tags", tag_router)
         .layer(Extension(Arc::new(token_app_service)))
         .layer(Extension(Arc::new(user_app_service)))
         .layer(cors_layer)
