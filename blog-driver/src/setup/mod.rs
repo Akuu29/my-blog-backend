@@ -1,5 +1,6 @@
 use crate::handler::{
     article::{all_articles, create_article, delete_article, find_article, update_article},
+    article_tags,
     category::{
         all_categories, create_category, delete_category, find_articles_by_category,
         update_category,
@@ -17,6 +18,7 @@ use axum::{
 use axum_extra::extract::cookie::Key;
 use blog_adapter::{
     db::{
+        article_tags::article_tags_repository::ArticleTagsRepository,
         articles::article_repository::ArticleRepository,
         categories::category_repository::CategoryRepository,
         comments::comment_repository::CommentRepository, tags::tag_repository::TagRepository,
@@ -28,6 +30,7 @@ use blog_adapter::{
 use blog_app::{
     query_service::articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
     service::{
+        article_tags::article_tags_app_service::ArticleTagsAppService,
         articles::article_app_service::ArticleAppService,
         categories::category_app_service::CategoryAppService,
         comments::comment_app_service::CommentAppService, tags::tag_app_service::TagAppService,
@@ -35,6 +38,7 @@ use blog_app::{
     },
 };
 use blog_domain::model::{
+    article_tags::i_article_tags_repository::IArticleTagsRepository,
     articles::i_article_repository::IArticleRepository,
     categories::i_category_repository::ICategoryRepository,
     comments::i_comment_repository::ICommentRepository, tags::i_tag_repository::ITagRepository,
@@ -68,6 +72,8 @@ pub async fn create_server() {
     let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
     let category_app_service = CategoryAppService::new(CategoryRepository::new(pool.clone()));
     let tag_app_service = TagAppService::new(TagRepository::new(pool.clone()));
+    let article_tags_app_service =
+        ArticleTagsAppService::new(ArticleTagsRepository::new(pool.clone()));
 
     let article_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
 
@@ -93,6 +99,7 @@ pub async fn create_server() {
         category_app_service,
         article_by_category_query_service,
         tag_app_service,
+        article_tags_app_service,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
@@ -112,6 +119,7 @@ fn create_router<
     X: ICategoryRepository,
     Y: IArticlesByCategoryQueryService,
     Z: ITagRepository,
+    A: IArticleTagsRepository,
 >(
     cors_layer: CorsLayer,
     app_state: AppState,
@@ -122,6 +130,7 @@ fn create_router<
     category_app_service: CategoryAppService<X>,
     articles_by_category_query_service: Y,
     tag_app_service: TagAppService<Z>,
+    article_tags_app_service: ArticleTagsAppService<A>,
 ) -> Router {
     let token_router = Router::new()
         .route("/verify", get(verify_id_token::<T, U>))
@@ -175,6 +184,10 @@ fn create_router<
         .route("/:tag_id", delete(tag::delete::<Z, T>))
         .layer(Extension(Arc::new(tag_app_service)));
 
+    let article_tags_router = Router::new()
+        .route("/", post(article_tags::attach_tags_to_article::<A, T>))
+        .layer(Extension(Arc::new(article_tags_app_service)));
+
     Router::new()
         .route("/", get(root))
         .nest("/token", token_router)
@@ -183,6 +196,7 @@ fn create_router<
         .nest("/comments", comments_router)
         .nest("/categories", category_router)
         .nest("/tags", tag_router)
+        .nest("/article-tags", article_tags_router)
         .layer(Extension(Arc::new(token_app_service)))
         .layer(Extension(Arc::new(user_app_service)))
         .layer(cors_layer)
