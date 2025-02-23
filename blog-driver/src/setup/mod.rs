@@ -1,5 +1,8 @@
 use crate::handler::{
-    article::{all_articles, create_article, delete_article, find_article, update_article},
+    article::{
+        all_articles, create_article, delete_article, find_article, find_articles_by_tag,
+        update_article,
+    },
     article_tags,
     category::{
         all_categories, create_category, delete_category, find_articles_by_category,
@@ -25,10 +28,16 @@ use blog_adapter::{
         users::user_repository::UserRepository,
     },
     idp::tokens::token_repository::TokenRepository,
-    query_service::articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
+    query_service::{
+        articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
+        articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService,
+    },
 };
 use blog_app::{
-    query_service::articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
+    query_service::{
+        articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
+        articles_by_tag::i_articles_by_tag_query_service::IArticlesByTagQueryService,
+    },
     service::{
         article_tags::article_tags_app_service::ArticleTagsAppService,
         articles::article_app_service::ArticleAppService,
@@ -76,7 +85,7 @@ pub async fn create_server() {
         ArticleTagsAppService::new(ArticleTagsRepository::new(pool.clone()));
 
     let article_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
-
+    let article_by_tag_query_service = ArticlesByTagQueryService::new(pool.clone());
     let client = reqwest::Client::new();
     let token_app_service = TokenAppService::new(TokenRepository::new(client.clone()));
 
@@ -100,6 +109,7 @@ pub async fn create_server() {
         article_by_category_query_service,
         tag_app_service,
         article_tags_app_service,
+        article_by_tag_query_service,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
@@ -120,6 +130,7 @@ fn create_router<
     Y: IArticlesByCategoryQueryService,
     Z: ITagRepository,
     A: IArticleTagsRepository,
+    B: IArticlesByTagQueryService,
 >(
     cors_layer: CorsLayer,
     app_state: AppState,
@@ -131,6 +142,7 @@ fn create_router<
     articles_by_category_query_service: Y,
     tag_app_service: TagAppService<Z>,
     article_tags_app_service: ArticleTagsAppService<A>,
+    article_by_tag_query_service: B,
 ) -> Router {
     let token_router = Router::new()
         .route("/verify", get(verify_id_token::<T, U>))
@@ -153,7 +165,9 @@ fn create_router<
                 .patch(update_article::<V, T>)
                 .delete(delete_article::<V, T>),
         )
-        .layer(Extension(Arc::new(article_app_service)));
+        .route("/by-tag", get(find_articles_by_tag::<B>))
+        .layer(Extension(Arc::new(article_app_service)))
+        .layer(Extension(Arc::new(article_by_tag_query_service)));
 
     let comments_router = Router::new()
         .route("/", post(create_comment::<W>))
