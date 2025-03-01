@@ -42,7 +42,7 @@ impl IArticleRepository for ArticleRepository {
         .bind(payload.title)
         .bind(payload.body)
         .bind(payload.status)
-        .bind(payload.category_id.unwrap())
+        .bind(payload.category_id)
         .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
@@ -110,11 +110,7 @@ impl IArticleRepository for ArticleRepository {
         .bind(payload.title.unwrap_or(pre_payload.title))
         .bind(payload.body.unwrap_or(pre_payload.body))
         .bind(payload.status.unwrap_or(pre_payload.status))
-        .bind(
-            payload
-                .category_id
-                .unwrap_or(pre_payload.category_id.unwrap()),
-        )
+        .bind(payload.category_id)
         .bind(article_id)
         .fetch_one(&self.pool)
         .await?;
