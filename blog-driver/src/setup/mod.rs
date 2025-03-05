@@ -31,12 +31,14 @@ use blog_adapter::{
     query_service::{
         articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
         articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService,
+        tags_attached_article::tags_attached_article_query_service::TagsAttachedArticleQueryService,
     },
 };
 use blog_app::{
     query_service::{
         articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
         articles_by_tag::i_articles_by_tag_query_service::IArticlesByTagQueryService,
+        tags_attached_article::i_tags_attached_article_query_service::ITagsAttachedArticleQueryService,
     },
     service::{
         article_tags::article_tags_app_service::ArticleTagsAppService,
@@ -86,6 +88,8 @@ pub async fn create_server() {
 
     let article_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
     let article_by_tag_query_service = ArticlesByTagQueryService::new(pool.clone());
+    let tags_attached_article_query_service = TagsAttachedArticleQueryService::new(pool.clone());
+
     let client = reqwest::Client::new();
     let token_app_service = TokenAppService::new(TokenRepository::new(client.clone()));
 
@@ -110,6 +114,7 @@ pub async fn create_server() {
         tag_app_service,
         article_tags_app_service,
         article_by_tag_query_service,
+        tags_attached_article_query_service,
     );
     let addr = &env::var("ADDR").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(addr)
@@ -131,6 +136,7 @@ fn create_router<
     Z: ITagRepository,
     A: IArticleTagsRepository,
     B: IArticlesByTagQueryService,
+    C: ITagsAttachedArticleQueryService,
 >(
     cors_layer: CorsLayer,
     app_state: AppState,
@@ -143,6 +149,7 @@ fn create_router<
     tag_app_service: TagAppService<Z>,
     article_tags_app_service: ArticleTagsAppService<A>,
     article_by_tag_query_service: B,
+    tags_attached_article_query_service: C,
 ) -> Router {
     let token_router = Router::new()
         .route("/verify", get(verify_id_token::<T, U>))
@@ -196,7 +203,12 @@ fn create_router<
     let tag_router = Router::new()
         .route("/", post(tag::create::<Z, T>).get(tag::all::<Z>))
         .route("/:tag_id", delete(tag::delete::<Z, T>))
-        .layer(Extension(Arc::new(tag_app_service)));
+        .route(
+            "/by-article/:article_id",
+            get(tag::find_tags_by_article_id::<C>),
+        )
+        .layer(Extension(Arc::new(tag_app_service)))
+        .layer(Extension(Arc::new(tags_attached_article_query_service)));
 
     let article_tags_router = Router::new()
         .route("/", post(article_tags::attach_tags_to_article::<A, T>))

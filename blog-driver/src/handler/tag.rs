@@ -4,8 +4,9 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use blog_app::service::{
-    tags::tag_app_service::TagAppService, tokens::token_app_service::TokenAppService,
+use blog_app::{
+    query_service::tags_attached_article::i_tags_attached_article_query_service::ITagsAttachedArticleQueryService,
+    service::{tags::tag_app_service::TagAppService, tokens::token_app_service::TokenAppService},
 };
 use blog_domain::model::{
     tags::{i_tag_repository::ITagRepository, tag::NewTag, tag_filter::TagFilter},
@@ -66,4 +67,16 @@ pub async fn delete<T: ITagRepository, U: ITokenRepository>(
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn find_tags_by_article_id<T: ITagsAttachedArticleQueryService>(
+    Extension(tags_attached_article_query_service): Extension<Arc<T>>,
+    Path(article_id): Path<i32>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let tags = tags_attached_article_query_service
+        .find_tags_by_article_id(article_id)
+        .await
+        .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    Ok((StatusCode::OK, Json(tags)))
 }

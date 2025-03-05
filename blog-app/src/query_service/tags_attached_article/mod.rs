@@ -1,0 +1,1 @@
+pub mod i_tags_attached_article_query_service;
