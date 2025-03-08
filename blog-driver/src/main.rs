@@ -1,8 +1,8 @@
 mod handler;
 mod model;
-mod setup;
+mod server;
 
 #[tokio::main]
 async fn main() {
-    setup::create_server().await;
+    server::run().await;
 }
