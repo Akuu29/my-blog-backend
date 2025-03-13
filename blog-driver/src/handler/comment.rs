@@ -1,4 +1,4 @@
-use crate::{handler::ValidatedJson, model::api_response::ApiResponse};
+use crate::model::{api_response::ApiResponse, validated_json::ValidatedJson};
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,

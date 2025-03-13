@@ -1,6 +1,5 @@
-use crate::{
-    handler::ValidatedJson,
-    model::{api_response::ApiResponse, auth_token::AuthToken},
+use crate::model::{
+    api_response::ApiResponse, auth_token::AuthToken, validated_json::ValidatedJson,
 };
 use axum::{
     extract::{Extension, Path},
