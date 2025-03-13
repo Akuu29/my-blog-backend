@@ -7,7 +7,6 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::Query;
-use blog_adapter::query_service::articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService;
 use blog_app::query_service::articles_by_tag::i_articles_by_tag_query_service::IArticlesByTagQueryService;
 use blog_app::{
     service::articles::article_app_service::ArticleAppService,
@@ -124,7 +123,7 @@ pub struct TagIds {
     pub ids: Option<Vec<String>>,
 }
 pub async fn find_articles_by_tag<T: IArticlesByTagQueryService>(
-    Extension(articles_by_tag_query_service): Extension<Arc<ArticlesByTagQueryService>>,
+    Extension(articles_by_tag_query_service): Extension<Arc<T>>,
     Query(tag_ids): Query<TagIds>,
 ) -> Result<impl IntoResponse, ApiResponse<()>> {
     let articles = articles_by_tag_query_service
