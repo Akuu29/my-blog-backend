@@ -1,8 +1,10 @@
-use crate::{handler::ValidatedJson, model::auth_token::AuthToken};
+use crate::{
+    handler::ValidatedJson,
+    model::{api_response::ApiResponse, auth_token::AuthToken},
+};
 use axum::{
     extract::{Extension, Path, Query},
     response::IntoResponse,
-    Json,
 };
 use blog_app::{
     query_service::tags_attached_article::i_tags_attached_article_query_service::ITagsAttachedArticleQueryService,
@@ -20,33 +22,37 @@ pub async fn create<T: ITagRepository, U: ITokenRepository>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewTag>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
-            StatusCode::UNAUTHORIZED
+            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
         })?;
 
     let tag = tag_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::CREATED, Json(tag)))
+    Ok(ApiResponse::new(StatusCode::CREATED, Some(tag), None))
 }
 
 pub async fn all<T: ITagRepository>(
     Extension(tag_app_service): Extension<Arc<TagAppService<T>>>,
     Query(tag_filter): Query<TagFilter>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let tags = tag_app_service
         .all(tag_filter)
         .await
-        .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+        .or(Err(ApiResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            None,
+            None,
+        )))?;
 
-    Ok((StatusCode::OK, Json(tags)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(tags), None))
 }
 
 pub async fn delete<T: ITagRepository, U: ITokenRepository>(
@@ -54,29 +60,37 @@ pub async fn delete<T: ITagRepository, U: ITokenRepository>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(tag_id): Path<i32>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        .map_err(|_| ApiResponse::new(StatusCode::UNAUTHORIZED, None, None))?;
 
     tag_app_service
         .delete(tag_id)
         .await
-        .map(|_| StatusCode::NO_CONTENT)
-        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        .map(|_| ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
+        .unwrap_or(ApiResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            None,
+            None,
+        ));
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
 
 pub async fn find_tags_by_article_id<T: ITagsAttachedArticleQueryService>(
     Extension(tags_attached_article_query_service): Extension<Arc<T>>,
     Path(article_id): Path<i32>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let tags = tags_attached_article_query_service
         .find_tags_by_article_id(article_id)
         .await
-        .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+        .or(Err(ApiResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            None,
+            None,
+        )))?;
 
-    Ok((StatusCode::OK, Json(tags)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(tags), None))
 }

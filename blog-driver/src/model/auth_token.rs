@@ -14,7 +14,7 @@ where
     B: Send + 'static,
     T: TokenString + From<String>,
 {
-    type Rejection = StatusCode;
+    type Rejection = (StatusCode, String);
 
     async fn from_request_parts(parts: &mut Parts, _state: &B) -> Result<Self, Self::Rejection> {
         let token = parts.headers.typed_get::<Authorization<Bearer>>();
@@ -25,7 +25,7 @@ where
                 let token_instance: T = token.into();
                 Ok(AuthToken(token_instance))
             }
-            _ => Err(StatusCode::BAD_REQUEST),
+            _ => Err((StatusCode::BAD_REQUEST, "Invalid token".to_string())),
         }
     }
 }

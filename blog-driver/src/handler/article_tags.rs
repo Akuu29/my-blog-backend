@@ -1,3 +1,4 @@
+use crate::model::{api_response::ApiResponse, auth_token::AuthToken};
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use blog_app::service::{
     article_tags::article_tags_app_service::ArticleTagsAppService,
@@ -11,23 +12,25 @@ use blog_domain::model::{
 };
 use std::sync::Arc;
 
-use crate::model::auth_token::AuthToken;
-
 pub async fn attach_tags_to_article<T: IArticleTagsRepository, U: ITokenRepository>(
     Extension(article_tags_app_service): Extension<Arc<ArticleTagsAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Json(payload): Json<ArticleAttachedTags>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        .map_err(|_| ApiResponse::new(StatusCode::UNAUTHORIZED, None, None))?;
 
     let article_tags = article_tags_app_service
         .attach_tags_to_article(payload)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::CREATED, Json(article_tags)))
+    Ok(ApiResponse::new(
+        StatusCode::CREATED,
+        Some(article_tags),
+        None,
+    ))
 }

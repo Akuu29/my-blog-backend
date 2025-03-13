@@ -9,12 +9,12 @@ use serde::Serialize;
 #[derive(Debug)]
 pub struct ApiResponse<T> {
     status: StatusCode,
-    body: T,
+    body: Option<T>,
     cookies: Option<PrivateCookieJar>,
 }
 
 impl<T> ApiResponse<T> {
-    pub fn new(status: StatusCode, body: T, cookies: Option<PrivateCookieJar>) -> Self {
+    pub fn new(status: StatusCode, body: Option<T>, cookies: Option<PrivateCookieJar>) -> Self {
         Self {
             status,
             body,

@@ -1,6 +1,9 @@
-use crate::{handler::ValidatedJson, model::auth_token::AuthToken};
+use crate::{
+    handler::ValidatedJson,
+    model::{api_response::ApiResponse, auth_token::AuthToken},
+};
 use axum::{
-    extract::{Extension, Json, Path, Query},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -25,33 +28,33 @@ pub async fn create_category<T: ICategoryRepository, U: ITokenRepository>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewCategory>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
-            StatusCode::UNAUTHORIZED
+            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
         })?;
 
     let category = category_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::CREATED, Json(category)))
+    Ok(ApiResponse::new(StatusCode::CREATED, Some(category), None))
 }
 
 pub async fn all_categories<T: ICategoryRepository>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Query(category_filter): Query<CategoryFilter>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let categories = category_app_service
         .all(category_filter)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::OK, Json(categories)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(categories), None))
 }
 
 pub async fn update_category<T: ICategoryRepository, U: ITokenRepository>(
@@ -60,21 +63,21 @@ pub async fn update_category<T: ICategoryRepository, U: ITokenRepository>(
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(category_id): Path<i32>,
     ValidatedJson(payload): ValidatedJson<UpdateCategory>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let _access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
-            StatusCode::UNAUTHORIZED
+            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
         })?;
 
     let category = category_app_service
         .update(category_id, payload)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::OK, Json(category)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(category), None))
 }
 
 pub async fn delete_category<T: ICategoryRepository, U: ITokenRepository>(
@@ -82,31 +85,35 @@ pub async fn delete_category<T: ICategoryRepository, U: ITokenRepository>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(category_id): Path<i32>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let _access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
-            StatusCode::UNAUTHORIZED
+            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
         })?;
 
     category_app_service
         .delete(category_id)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
 
 pub async fn find_articles_by_category<T: IArticlesByCategoryQueryService>(
     Extension(articles_by_category_query_service): Extension<Arc<T>>,
     Path(category_name): Path<String>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let articles_by_category = articles_by_category_query_service
         .find_article_title_by_category(category_name)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::OK, Json(articles_by_category)))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(articles_by_category),
+        None,
+    ))
 }

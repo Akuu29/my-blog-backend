@@ -1,6 +1,9 @@
-use crate::{handler::ValidatedJson, model::auth_token::AuthToken};
+use crate::{
+    handler::ValidatedJson,
+    model::{api_response::ApiResponse, auth_token::AuthToken},
+};
 use axum::{
-    extract::{Extension, Json, Path},
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -40,42 +43,42 @@ pub async fn create<T: IUserRepository, U: ITokenRepository>(
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 
-    Ok((StatusCode::CREATED, Json(user)))
+    Ok(ApiResponse::new(StatusCode::CREATED, Some(user), None))
 }
 
 pub async fn find<T: IUserRepository>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Path(user_id): Path<Uuid>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let user = user_app_service
         .find(user_id)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::OK, Json(user)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(user), None))
 }
 
 pub async fn update<T: IUserRepository>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Path(user_id): Path<Uuid>,
     ValidatedJson(payload): ValidatedJson<UpdateUser>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let user = user_app_service
         .update(user_id, payload)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::OK, Json(user)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(user), None))
 }
 
 pub async fn delete<T: IUserRepository>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Path(user_id): Path<Uuid>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     user_app_service
         .delete(user_id)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(StatusCode::OK)
+    Ok(ApiResponse::<()>::new(StatusCode::OK, None, None))
 }

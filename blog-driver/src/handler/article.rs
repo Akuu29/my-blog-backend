@@ -1,9 +1,11 @@
-use crate::{handler::ValidatedJson, model::auth_token::AuthToken};
+use crate::{
+    handler::ValidatedJson,
+    model::{api_response::ApiResponse, auth_token::AuthToken},
+};
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use axum_extra::extract::Query;
 use blog_adapter::query_service::articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService;
@@ -27,44 +29,45 @@ pub async fn create_article<T: IArticleRepository, U: ITokenRepository>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewArticle>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
-            StatusCode::UNAUTHORIZED
+            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
         })?;
 
     let article = article_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::CREATED, Json(article)))
+    Ok(ApiResponse::new(StatusCode::CREATED, Some(article), None))
 }
 
 pub async fn find_article<T: IArticleRepository>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Path(article_id): Path<i32>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let article = article_app_service
         .find(article_id)
         .await
-        .or(Err(StatusCode::NOT_FOUND))?;
+        .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
 
-    Ok((StatusCode::OK, Json(article)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(article), None))
 }
 
 pub async fn all_articles<T: IArticleRepository>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
-) -> Result<impl IntoResponse, StatusCode> {
-    let articles = article_app_service
-        .all()
-        .await
-        .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+) -> Result<impl IntoResponse, ApiResponse<()>> {
+    let articles = article_app_service.all().await.or(Err(ApiResponse::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        None,
+        None,
+    )))?;
 
-    Ok((StatusCode::OK, Json(articles)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(articles), None))
 }
 
 pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
@@ -73,21 +76,21 @@ pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
     Path(article_id): Path<i32>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<UpdateArticle>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let _access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
-            StatusCode::UNAUTHORIZED
+            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
         })?;
 
     let article = article_app_service
         .update(article_id, payload)
         .await
-        .or(Err(StatusCode::BAD_REQUEST))?;
+        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok((StatusCode::OK, Json(article)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(article), None))
 }
 
 pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
@@ -95,22 +98,26 @@ pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(article_id): Path<i32>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let _access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
             tracing::info!("failed to verify access token: {:?}", e);
-            StatusCode::UNAUTHORIZED
+            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
         })?;
 
     article_app_service
         .delete(article_id)
         .await
-        .map(|_| StatusCode::NO_CONTENT)
-        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        .map(|_| ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
+        .unwrap_or(ApiResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            None,
+            None,
+        ));
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,11 +127,15 @@ pub struct TagIds {
 pub async fn find_articles_by_tag<T: IArticlesByTagQueryService>(
     Extension(articles_by_tag_query_service): Extension<Arc<ArticlesByTagQueryService>>,
     Query(tag_ids): Query<TagIds>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<impl IntoResponse, ApiResponse<()>> {
     let articles = articles_by_tag_query_service
         .find_article_title_by_tag(tag_ids.ids)
         .await
-        .or(Err(StatusCode::INTERNAL_SERVER_ERROR))?;
+        .or(Err(ApiResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            None,
+            None,
+        )))?;
 
-    Ok((StatusCode::OK, Json(articles)))
+    Ok(ApiResponse::new(StatusCode::OK, Some(articles), None))
 }
