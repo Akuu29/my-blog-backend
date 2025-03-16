@@ -61,21 +61,15 @@ impl AppRouter {
     {
         let token_router = Self::create_token_router::<T, U>();
         let users_router = Self::create_users_router::<T, U>();
-        let articles_router = Self::create_articles_router::<T, V, B>(
-            article_app_service,
-            article_by_tag_query_service,
-        );
+        let articles_router = Self::create_articles_router::<T, V, B>(article_by_tag_query_service);
         let comments_router = Self::create_comments_router::<W>(comment_app_service);
         let category_router = Self::create_category_router::<T, X, A>(
             category_app_service,
             articles_by_category_query_service,
         );
-        let tag_router = Self::create_tag_router::<T, Y, C>(
-            tag_app_service,
-            tags_attached_article_query_service,
-        );
+        let tag_router = Self::create_tag_router::<T, Y, C>(tags_attached_article_query_service);
         let article_tags_router =
-            Self::create_article_tags_router::<T, Z>(article_tags_app_service);
+            Self::create_article_tags_router::<T, Z, V, Y>(article_tags_app_service);
 
         let router = Router::new()
             .route("/hello-world", get(|| async { "Hello, world!" }))
@@ -88,6 +82,8 @@ impl AppRouter {
             .nest("/article-tags", article_tags_router)
             .layer(Extension(Arc::new(token_app_service)))
             .layer(Extension(Arc::new(user_app_service)))
+            .layer(Extension(Arc::new(article_app_service)))
+            .layer(Extension(Arc::new(tag_app_service)))
             .layer(cors_layer)
             .with_state(app_state);
 
@@ -119,10 +115,7 @@ impl AppRouter {
             )
     }
 
-    fn create_articles_router<T, U, V>(
-        article_app_service: ArticleAppService<U>,
-        article_by_tag_query_service: V,
-    ) -> Router<AppState>
+    fn create_articles_router<T, U, V>(article_by_tag_query_service: V) -> Router<AppState>
     where
         T: ITokenRepository,
         U: IArticleRepository,
@@ -140,7 +133,6 @@ impl AppRouter {
                     .delete(article::delete_article::<U, T>),
             )
             .route("/by-tag", get(article::find_articles_by_tag::<V>))
-            .layer(Extension(Arc::new(article_app_service)))
             .layer(Extension(Arc::new(article_by_tag_query_service)))
     }
 
@@ -189,10 +181,7 @@ impl AppRouter {
             .layer(Extension(Arc::new(articles_by_category_query_service)))
     }
 
-    fn create_tag_router<T, U, V>(
-        tag_app_service: TagAppService<U>,
-        tags_attached_article_query_service: V,
-    ) -> Router<AppState>
+    fn create_tag_router<T, U, V>(tags_attached_article_query_service: V) -> Router<AppState>
     where
         T: ITokenRepository,
         U: ITagRepository,
@@ -205,19 +194,23 @@ impl AppRouter {
                 "/by-article/:article_id",
                 get(tag::find_tags_by_article_id::<V>),
             )
-            .layer(Extension(Arc::new(tag_app_service)))
             .layer(Extension(Arc::new(tags_attached_article_query_service)))
     }
 
-    fn create_article_tags_router<T, U>(
+    fn create_article_tags_router<T, U, V, W>(
         article_tags_app_service: ArticleTagsAppService<U>,
     ) -> Router<AppState>
     where
         T: ITokenRepository,
         U: IArticleTagsRepository,
+        V: IArticleRepository,
+        W: ITagRepository,
     {
         Router::new()
-            .route("/", post(article_tags::attach_tags_to_article::<U, T>))
+            .route(
+                "/",
+                post(article_tags::attach_tags_to_article::<U, T, V, W>),
+            )
             .layer(Extension(Arc::new(article_tags_app_service)))
     }
 }
