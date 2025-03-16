@@ -19,10 +19,10 @@ impl ArticleTagsRepository {
 #[async_trait]
 impl IArticleTagsRepository for ArticleTagsRepository {
     async fn delete_insert(&self, payload: ArticleAttachedTags) -> anyhow::Result<Vec<ArticleTag>> {
-        // transaction
         let tx = self.pool.begin().await?;
 
-        sqlx::query!(
+        // Delete all attached tags from the article
+        let delete_result = sqlx::query!(
             r#"
             DELETE FROM article_tags
             WHERE article_id = $1;
@@ -34,28 +34,36 @@ impl IArticleTagsRepository for ArticleTagsRepository {
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
             e => RepositoryError::Unexpected(e.to_string()),
-        })?;
+        });
 
-        let values: Vec<String> = payload
-            .tag_ids
-            .iter()
-            .map(|tag_id| format!("({}, {})", payload.article_id, tag_id))
-            .collect();
+        if delete_result.is_err() {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(delete_result.err().unwrap()));
+        }
 
-        let create_result = sqlx::query_as::<_, ArticleTag>(&format!(
-            r#"
-                INSERT INTO article_tags (
-                    article_id,
-                    tag_id
-                )
-                VALUES {}
-                RETURNING *;
-                "#,
-            values.join(", ")
-        ))
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Unexpected(e.to_string()));
+        // Bulk insert new article tags
+        let mut bulk_insert_query_string =
+            String::from("INSERT INTO article_tags (article_id, tag_id) VALUES ");
+        let mut params = Vec::new();
+        let mut values = Vec::new();
+
+        for (i, tag_id) in payload.tag_ids.iter().enumerate() {
+            params.push(format!("(${}, ${})", i * 2 + 1, i * 2 + 2));
+            values.push((payload.article_id, *tag_id));
+        }
+
+        bulk_insert_query_string.push_str(&params.join(","));
+        bulk_insert_query_string.push_str(" RETURNING *;");
+        let mut query = sqlx::query_as::<_, ArticleTag>(&bulk_insert_query_string);
+
+        for (article_id, tag_id) in values {
+            query = query.bind(article_id).bind(tag_id);
+        }
+
+        let create_result = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Unexpected(e.to_string()));
 
         match create_result {
             Ok(article_tags) => {
