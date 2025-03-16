@@ -59,6 +59,10 @@ impl ITagRepository for TagRepository {
             conditions.push("user_id = $1");
         }
 
+        if tag_filter.tag_ids.is_some() {
+            conditions.push("id = ANY($2)");
+        }
+
         if !conditions.is_empty() {
             query.push(" WHERE ").push(conditions.join(" AND "));
         }
@@ -67,6 +71,7 @@ impl ITagRepository for TagRepository {
         let tags = query
             .build_query_as::<Tag>()
             .bind(tag_filter.user_id)
+            .bind(tag_filter.tag_ids)
             .fetch_all(&self.pool)
             .await?;
 
