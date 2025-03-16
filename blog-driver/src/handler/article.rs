@@ -49,7 +49,7 @@ pub async fn find_article<T: IArticleRepository>(
     Path(article_id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiResponse<()>> {
     let article = article_app_service
-        .find(article_id)
+        .find(article_id, None)
         .await
         .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
 

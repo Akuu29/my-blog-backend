@@ -2,9 +2,10 @@ use crate::db::utils::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::articles::{
     article::{Article, NewArticle, UpdateArticle},
+    article_filter::ArticleFilter,
     i_article_repository::IArticleRepository,
 };
-use sqlx::types::Uuid;
+use sqlx::{types::Uuid, QueryBuilder};
 
 #[derive(Debug, Clone)]
 pub struct ArticleRepository {
@@ -50,8 +51,12 @@ impl IArticleRepository for ArticleRepository {
         Ok(article)
     }
 
-    async fn find(&self, article_id: i32) -> anyhow::Result<Article> {
-        let article = sqlx::query_as::<_, Article>(
+    async fn find(
+        &self,
+        article_id: i32,
+        article_filter: Option<ArticleFilter>,
+    ) -> anyhow::Result<Article> {
+        let mut query = QueryBuilder::new(
             r#"
             SELECT
                 id,
@@ -62,12 +67,32 @@ impl IArticleRepository for ArticleRepository {
                 created_at,
                 updated_at
             FROM articles
-            WHERE id = $1;
+            WHERE id = $1
             "#,
-        )
-        .bind(article_id)
-        .fetch_one(&self.pool)
-        .await?;
+        );
+
+        let mut conditions = Vec::new();
+
+        let mut user_id: Option<Uuid> = None;
+        if let Some(article_filter) = article_filter {
+            if article_filter.user_id.is_some() {
+                conditions.push("user_id = $2");
+                user_id = article_filter.user_id;
+            }
+        }
+
+        if !conditions.is_empty() {
+            query.push(" AND ").push(conditions.join(" AND "));
+        }
+
+        query.push(" ORDER BY id DESC; ");
+
+        let article = query
+            .build_query_as::<Article>()
+            .bind(article_id)
+            .bind(user_id)
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(article)
     }
@@ -94,7 +119,7 @@ impl IArticleRepository for ArticleRepository {
     }
 
     async fn update(&self, article_id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
-        let pre_payload = self.find(article_id).await?;
+        let pre_payload = self.find(article_id, None).await?;
         let article = sqlx::query_as::<_, Article>(
             r#"
             UPDATE articles set

@@ -1,5 +1,6 @@
 use blog_domain::model::articles::{
     article::{Article, NewArticle, UpdateArticle},
+    article_filter::ArticleFilter,
     i_article_repository::IArticleRepository,
 };
 use sqlx::types::Uuid;
@@ -17,8 +18,12 @@ impl<T: IArticleRepository> ArticleAppService<T> {
         self.repository.create(user_id, payload).await
     }
 
-    pub async fn find(&self, article_id: i32) -> anyhow::Result<Article> {
-        self.repository.find(article_id).await
+    pub async fn find(
+        &self,
+        article_id: i32,
+        article_filter: Option<ArticleFilter>,
+    ) -> anyhow::Result<Article> {
+        self.repository.find(article_id, article_filter).await
     }
 
     pub async fn all(&self) -> anyhow::Result<Vec<Article>> {
