@@ -18,9 +18,9 @@ impl ArticlesByTagQueryService {
 impl IArticlesByTagQueryService for ArticlesByTagQueryService {
     async fn find_article_title_by_tag(
         &self,
-        tag_ids: Option<Vec<String>>,
+        tag_ids: Option<Vec<i32>>,
     ) -> anyhow::Result<Vec<Article>> {
-        let mut query = QueryBuilder::new(
+        let mut query_builder = QueryBuilder::new(
             r#"
             SELECT
                 DISTINCT ON (a.id)
@@ -33,29 +33,23 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
                 a.created_at as created_at,
                 a.updated_at as updated_at
             FROM articles as a
+            INNER JOIN article_tags as at ON a.id = at.article_id
             "#,
         );
 
-        let mut conditions = vec![];
-
         if tag_ids.is_some() {
-            query.push("INNER JOIN article_tags as at ON a.id = at.article_id");
-
-            let tag_ids = tag_ids.unwrap();
-            let tag_ids_str = tag_ids.join(",");
-            conditions.push(format!("at.tag_id IN ({})", tag_ids_str));
+            query_builder.push("WHERE at.tag_id = ANY($1)");
         }
 
-        if !conditions.is_empty() {
-            query.push(" WHERE ").push(conditions.join(" AND "));
-        }
+        query_builder.push(" ORDER BY id DESC;");
 
-        query.push(" ORDER BY id DESC;");
+        let query = query_builder.build_query_as::<Article>();
 
-        let articles = query
-            .build_query_as::<Article>()
-            .fetch_all(&self.pool)
-            .await?;
+        let articles = if let Some(tag_ids) = tag_ids {
+            query.bind(tag_ids).fetch_all(&self.pool).await?
+        } else {
+            query.fetch_all(&self.pool).await?
+        };
 
         Ok(articles)
     }

@@ -7,6 +7,6 @@ pub trait IArticlesByTagQueryService:
 {
     async fn find_article_title_by_tag(
         &self,
-        tag_ids: Option<Vec<String>>,
+        tag_ids: Option<Vec<i32>>,
     ) -> anyhow::Result<Vec<Article>>;
 }

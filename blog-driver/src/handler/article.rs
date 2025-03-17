@@ -120,7 +120,7 @@ pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
 
 #[derive(Debug, Deserialize)]
 pub struct TagIds {
-    pub ids: Option<Vec<String>>,
+    pub ids: Option<Vec<i32>>,
 }
 pub async fn find_articles_by_tag<T: IArticlesByTagQueryService>(
     Extension(articles_by_tag_query_service): Extension<Arc<T>>,
