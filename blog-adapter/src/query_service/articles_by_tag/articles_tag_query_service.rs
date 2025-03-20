@@ -18,7 +18,9 @@ impl ArticlesByTagQueryService {
 impl IArticlesByTagQueryService for ArticlesByTagQueryService {
     async fn find_article_title_by_tag(
         &self,
-        tag_ids: Option<Vec<i32>>,
+        tag_ids: Vec<i32>,
+        cursor: Option<i32>,
+        per_page: i32,
     ) -> anyhow::Result<Vec<Article>> {
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -34,22 +36,23 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
                 a.updated_at as updated_at
             FROM articles as a
             INNER JOIN article_tags as at ON a.id = at.article_id
+            WHERE at.tag_id = ANY($1)
             "#,
         );
 
-        if tag_ids.is_some() {
-            query_builder.push("WHERE at.tag_id = ANY($1)");
+        if cursor.is_some() {
+            query_builder.push("AND a.id < $2");
         }
 
-        query_builder.push(" ORDER BY id DESC;");
+        query_builder.push("ORDER BY a.id DESC LIMIT $3;");
 
-        let query = query_builder.build_query_as::<Article>();
-
-        let articles = if let Some(tag_ids) = tag_ids {
-            query.bind(tag_ids).fetch_all(&self.pool).await?
-        } else {
-            query.fetch_all(&self.pool).await?
-        };
+        let articles = query_builder
+            .build_query_as::<Article>()
+            .bind(tag_ids)
+            .bind(cursor)
+            .bind(per_page)
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(articles)
     }

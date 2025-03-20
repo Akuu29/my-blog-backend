@@ -26,8 +26,8 @@ impl<T: IArticleRepository> ArticleAppService<T> {
         self.repository.find(article_id, article_filter).await
     }
 
-    pub async fn all(&self) -> anyhow::Result<Vec<Article>> {
-        self.repository.all().await
+    pub async fn all(&self, cursor: Option<i32>, per_page: i32) -> anyhow::Result<Vec<Article>> {
+        self.repository.all(cursor, per_page).await
     }
 
     pub async fn update(&self, article_id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {

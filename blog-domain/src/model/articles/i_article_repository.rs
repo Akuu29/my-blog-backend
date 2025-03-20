@@ -13,7 +13,7 @@ pub trait IArticleRepository: Clone + std::marker::Send + std::marker::Sync + 's
         article_id: i32,
         article_filter: Option<ArticleFilter>,
     ) -> anyhow::Result<Article>;
-    async fn all(&self) -> anyhow::Result<Vec<Article>>;
+    async fn all(&self, cursor: Option<i32>, per_page: i32) -> anyhow::Result<Vec<Article>>;
     async fn update(&self, article_id: i32, payload: UpdateArticle) -> anyhow::Result<Article>;
     async fn delete(&self, article_id: i32) -> anyhow::Result<()>;
 }

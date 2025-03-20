@@ -1,5 +1,7 @@
 use crate::model::{
-    api_response::ApiResponse, auth_token::AuthToken, validated_json::ValidatedJson,
+    api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
+    pagination::Pagination, validated_json::ValidatedJson,
+    validated_query_param::ValidatedQueryParam,
 };
 use axum::{
     extract::{Extension, Path},
@@ -58,14 +60,21 @@ pub async fn find_article<T: IArticleRepository>(
 
 pub async fn all_articles<T: IArticleRepository>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
+    ValidatedQueryParam(pagination): ValidatedQueryParam<Pagination>,
 ) -> Result<impl IntoResponse, ApiResponse<()>> {
-    let articles = article_app_service.all().await.or(Err(ApiResponse::new(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        None,
-        None,
-    )))?;
+    let articles = article_app_service
+        .all(pagination.cursor, pagination.per_page)
+        .await
+        .or(Err(ApiResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            None,
+            None,
+        )))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(articles), None))
+    let next_cursor = articles.last().map(|article| article.id).or(None);
+    let paged_body = PagedBody::new(articles, next_cursor);
+
+    Ok(ApiResponse::new(StatusCode::OK, Some(paged_body), None))
 }
 
 pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
@@ -120,14 +129,15 @@ pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
 
 #[derive(Debug, Deserialize)]
 pub struct TagIds {
-    pub ids: Option<Vec<i32>>,
+    pub ids: Vec<i32>,
 }
 pub async fn find_articles_by_tag<T: IArticlesByTagQueryService>(
     Extension(articles_by_tag_query_service): Extension<Arc<T>>,
     Query(tag_ids): Query<TagIds>,
+    ValidatedQueryParam(pagination): ValidatedQueryParam<Pagination>,
 ) -> Result<impl IntoResponse, ApiResponse<()>> {
     let articles = articles_by_tag_query_service
-        .find_article_title_by_tag(tag_ids.ids)
+        .find_article_title_by_tag(tag_ids.ids, pagination.cursor, pagination.per_page)
         .await
         .or(Err(ApiResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -135,5 +145,8 @@ pub async fn find_articles_by_tag<T: IArticlesByTagQueryService>(
             None,
         )))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(articles), None))
+    let next_cursor = articles.last().map(|article| article.id).or(None);
+    let paged_body = PagedBody::new(articles, next_cursor);
+
+    Ok(ApiResponse::new(StatusCode::OK, Some(paged_body), None))
 }

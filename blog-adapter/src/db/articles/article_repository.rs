@@ -97,8 +97,8 @@ impl IArticleRepository for ArticleRepository {
         Ok(article)
     }
 
-    async fn all(&self) -> anyhow::Result<Vec<Article>> {
-        let articles = sqlx::query_as::<_, Article>(
+    async fn all(&self, cursor: Option<i32>, per_page: i32) -> anyhow::Result<Vec<Article>> {
+        let mut query_builder = QueryBuilder::new(
             r#"
             SELECT
                 id,
@@ -109,11 +109,22 @@ impl IArticleRepository for ArticleRepository {
                 created_at,
                 updated_at
             FROM articles
-            ORDER BY id DESC;
             "#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        );
+
+        if cursor.is_some() {
+            query_builder.push("WHERE id < $1");
+        }
+
+        query_builder.push("ORDER BY id DESC LIMIT $2;");
+
+        let query = query_builder.build_query_as::<Article>();
+
+        let articles = query
+            .bind(cursor)
+            .bind(per_page)
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(articles)
     }
