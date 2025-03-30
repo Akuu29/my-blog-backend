@@ -190,51 +190,91 @@ mod test {
             database_url
         ));
         let repository = ArticleRepository::new(pool);
+        let user_id =
+            Uuid::parse_str(&std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID"))
+                .expect("invalid TEST_USER_ID");
+        // create
         let payload = NewArticle {
             title: "title".to_string(),
             body: "body".to_string(),
             status: ArticleStatus::Draft,
             category_id: Some(1),
         };
+        let article = repository.create(user_id, payload.clone()).await.unwrap();
+        assert_eq!(article.title, payload.title);
+        assert_eq!(article.body, payload.body);
+        assert_eq!(article.status, payload.status);
 
-        // create
+        // find with filter
         let article = repository
-            .create(Uuid::new_v4(), payload.clone())
+            .find(
+                article.id,
+                Some(ArticleFilter {
+                    user_id: Some(user_id),
+                }),
+            )
             .await
             .unwrap();
         assert_eq!(article.title, payload.title);
         assert_eq!(article.body, payload.body);
         assert_eq!(article.status, payload.status);
 
-        // find
-        let article = repository.find(article.id).await.unwrap();
-        assert_eq!(article.title, payload.title);
-        assert_eq!(article.body, payload.body);
-        assert_eq!(article.status, payload.status);
+        // create more articles for pagination test
+        let second_article = repository
+            .create(
+                user_id,
+                NewArticle {
+                    title: "second title".to_string(),
+                    body: "second body".to_string(),
+                    status: ArticleStatus::Draft,
+                    category_id: Some(1),
+                },
+            )
+            .await
+            .unwrap();
 
-        // all
-        let articles = repository.all().await.unwrap();
-        assert_eq!(&article, articles.first().unwrap());
+        let third_article = repository
+            .create(
+                user_id,
+                NewArticle {
+                    title: "third title".to_string(),
+                    body: "third body".to_string(),
+                    status: ArticleStatus::Draft,
+                    category_id: Some(1),
+                },
+            )
+            .await
+            .unwrap();
+
+        // all with pagination
+        let articles = repository.all(None, 2).await.unwrap();
+        assert_eq!(articles.len(), 2);
+        assert_eq!(articles[0].id, third_article.id); // 最新順
+
+        // all with cursor
+        let articles = repository.all(Some(third_article.id), 2).await.unwrap();
+        assert_eq!(articles.len(), 2);
+        assert_eq!(articles[0].id, second_article.id);
 
         // update
-        let payload = UpdateArticle {
-            title: Some("new title".to_string()),
-            body: Some("new body".to_string()),
+        let update_payload = UpdateArticle {
+            title: Some("updated title".to_string()),
+            body: Some("updated body".to_string()),
             status: Some(ArticleStatus::Published),
             category_id: Some(2),
         };
-        let article = repository
-            .update(article.id, payload.clone())
+        let updated_article = repository
+            .update(article.id, update_payload.clone())
             .await
             .unwrap();
-        assert_eq!(article.title, payload.title.unwrap());
-        assert_eq!(article.body, payload.body.unwrap());
-        assert_eq!(article.status, payload.status.unwrap());
+        assert_eq!(updated_article.title, "updated title");
+        assert_eq!(updated_article.status, ArticleStatus::Published);
 
         // delete
         repository.delete(article.id).await.unwrap();
-        let _ = repository.all().await.unwrap();
-        let res = repository.find(article.id).await;
+        let articles = repository.all(None, 10).await.unwrap();
+        assert_eq!(articles.len(), 2);
+        let res = repository.find(article.id, None).await;
         assert!(res.is_err());
     }
 }
@@ -274,7 +314,7 @@ pub mod test_util {
 
     #[async_trait]
     impl IArticleRepository for RepositoryForMemory {
-        async fn create(&self, user_id: Uuid, payload: NewArticle) -> anyhow::Result<Article> {
+        async fn create(&self, _user_id: Uuid, payload: NewArticle) -> anyhow::Result<Article> {
             let mut store = self.write_store_ref();
             let id = (store.len() + 1) as i32;
             let article = Article {
@@ -291,7 +331,7 @@ pub mod test_util {
             Ok(article)
         }
 
-        async fn find(&self, id: i32) -> anyhow::Result<Article> {
+        async fn find(&self, id: i32, _: Option<ArticleFilter>) -> anyhow::Result<Article> {
             let store = self.read_store_ref();
             let article = store
                 .get(&id)
@@ -301,12 +341,18 @@ pub mod test_util {
             Ok(article)
         }
 
-        async fn all(&self) -> anyhow::Result<Vec<Article>> {
+        async fn all(&self, cursor: Option<i32>, per_page: i32) -> anyhow::Result<Vec<Article>> {
             let store = self.read_store_ref();
+            let mut articles: Vec<Article> = store.values().cloned().collect();
 
-            Ok(Vec::from_iter(
-                store.values().map(|article| article.clone()),
-            ))
+            articles.sort_by_key(|a| std::cmp::Reverse(a.id));
+
+            if let Some(cursor) = cursor {
+                articles.retain(|article| article.id < cursor);
+            }
+
+            articles.truncate(per_page as usize);
+            Ok(articles)
         }
 
         async fn update(&self, id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
@@ -348,51 +394,91 @@ pub mod test_util {
         #[tokio::test]
         async fn test_article_repository_for_memory() {
             let repository = RepositoryForMemory::new();
+            let user_id = Uuid::new_v4();
+
+            // create
             let payload = NewArticle {
                 title: "title".to_string(),
                 body: "body".to_string(),
                 category_id: Some(1),
                 status: ArticleStatus::Draft,
             };
+            let article = repository.create(user_id, payload.clone()).await.unwrap();
+            assert_eq!(article.title, payload.title);
+            assert_eq!(article.body, payload.body);
+            assert_eq!(article.status, payload.status);
 
-            // create
+            // find with filter
             let article = repository
-                .create(Uuid::new_v4(), payload.clone())
+                .find(
+                    article.id,
+                    Some(ArticleFilter {
+                        user_id: Some(user_id),
+                    }),
+                )
                 .await
                 .unwrap();
             assert_eq!(article.title, payload.title);
             assert_eq!(article.body, payload.body);
             assert_eq!(article.status, payload.status);
 
-            // find
-            let article = repository.find(article.id).await.unwrap();
-            assert_eq!(article.title, payload.title);
-            assert_eq!(article.body, payload.body);
-            assert_eq!(article.status, payload.status);
+            // create more articles for pagination test
+            let second_article = repository
+                .create(
+                    user_id,
+                    NewArticle {
+                        title: "second title".to_string(),
+                        body: "second body".to_string(),
+                        status: ArticleStatus::Draft,
+                        category_id: Some(1),
+                    },
+                )
+                .await
+                .unwrap();
 
-            // all
-            let articles = repository.all().await.unwrap();
-            assert_eq!(articles.len(), 1);
+            let third_article = repository
+                .create(
+                    user_id,
+                    NewArticle {
+                        title: "third title".to_string(),
+                        body: "third body".to_string(),
+                        status: ArticleStatus::Draft,
+                        category_id: Some(1),
+                    },
+                )
+                .await
+                .unwrap();
+
+            // all with pagination
+            let articles = repository.all(None, 2).await.unwrap();
+            assert_eq!(articles.len(), 2);
+            assert_eq!(articles[0].id, third_article.id);
+
+            // all with cursor
+            let articles = repository.all(Some(third_article.id), 2).await.unwrap();
+            assert_eq!(articles.len(), 2);
+            assert_eq!(articles[0].id, second_article.id);
 
             // update
-            let payload = UpdateArticle {
-                title: Some("new title".to_string()),
-                body: Some("new body".to_string()),
+            let update_payload = UpdateArticle {
+                title: Some("updated title".to_string()),
+                body: Some("updated body".to_string()),
                 status: Some(ArticleStatus::Published),
                 category_id: Some(2),
             };
-            let article = repository
-                .update(article.id, payload.clone())
+            let updated_article = repository
+                .update(article.id, update_payload.clone())
                 .await
                 .unwrap();
-            assert_eq!(article.title, payload.title.unwrap());
-            assert_eq!(article.body, payload.body.unwrap());
-            assert_eq!(article.status, payload.status.unwrap());
+            assert_eq!(updated_article.title, "updated title");
+            assert_eq!(updated_article.status, ArticleStatus::Published);
 
             // delete
             repository.delete(article.id).await.unwrap();
-            let articles = repository.all().await.unwrap();
-            assert_eq!(articles.len(), 0);
+            let articles = repository.all(None, 10).await.unwrap();
+            assert_eq!(articles.len(), 2); // 1つ削除されたので2つに
+            let res = repository.find(article.id, None).await;
+            assert!(res.is_err());
         }
     }
 }

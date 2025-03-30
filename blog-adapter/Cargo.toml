@@ -20,5 +20,5 @@ reqwest.workspace = true
 validator.workspace = true
 
 [features]
-default = ["database-test"]
+default = []
 database-test = []
