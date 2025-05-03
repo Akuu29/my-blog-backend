@@ -5,8 +5,8 @@ use blog_adapter::{
         article_tags::article_tags_repository::ArticleTagsRepository,
         articles::article_repository::ArticleRepository,
         categories::category_repository::CategoryRepository,
-        comments::comment_repository::CommentRepository, tags::tag_repository::TagRepository,
-        users::user_repository::UserRepository,
+        comments::comment_repository::CommentRepository, images::image_repository::ImageRepository,
+        tags::tag_repository::TagRepository, users::user_repository::UserRepository,
     },
     idp::tokens::token_repository::TokenRepository,
     query_service::{
@@ -19,8 +19,9 @@ use blog_app::service::{
     article_tags::article_tags_app_service::ArticleTagsAppService,
     articles::article_app_service::ArticleAppService,
     categories::category_app_service::CategoryAppService,
-    comments::comment_app_service::CommentAppService, tags::tag_app_service::TagAppService,
-    tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
+    comments::comment_app_service::CommentAppService, images::image_app_service::ImageAppService,
+    tags::tag_app_service::TagAppService, tokens::token_app_service::TokenAppService,
+    users::user_app_service::UserAppService,
 };
 use http::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE},
@@ -58,6 +59,7 @@ pub async fn run() {
     let article_tags_app_service =
         ArticleTagsAppService::new(ArticleTagsRepository::new(pool.clone()));
     let token_app_service = TokenAppService::new(TokenRepository::new(http_client.clone()));
+    let image_app_service = ImageAppService::new(ImageRepository::new(pool.clone()));
 
     // query services
     let articles_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
@@ -88,13 +90,14 @@ pub async fn run() {
         articles_by_category_query_service,
         article_by_tag_query_service,
         tags_attached_article_query_service,
+        image_app_service,
     );
-    let addr = std::env::var("ADDR").expect("undefined ADDR");
-    let lister = tokio::net::TcpListener::bind(&addr)
+    let domain = std::env::var("DOMAIN").expect("undefined ADDR");
+    let lister = tokio::net::TcpListener::bind(&domain)
         .await
         .expect("failed to bind");
 
-    tracing::debug!("listening on {}", &addr);
+    tracing::debug!("listening on {}", &domain);
 
     axum::serve(lister, app_router.router).await.unwrap();
 }

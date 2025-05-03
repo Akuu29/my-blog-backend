@@ -1,16 +1,16 @@
 use axum::{
     body::Body,
-    http::StatusCode,
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use axum_extra::extract::cookie::PrivateCookieJar;
-use serde::Serialize;
 
 #[derive(Debug)]
 pub struct ApiResponse<T> {
     status: StatusCode,
     body: Option<T>,
     cookies: Option<PrivateCookieJar>,
+    headers: HeaderMap,
 }
 
 impl<T> ApiResponse<T> {
@@ -19,32 +19,36 @@ impl<T> ApiResponse<T> {
             status,
             body,
             cookies,
+            headers: HeaderMap::new(),
         }
+    }
+
+    pub fn with_header(mut self, key: &str, value: &str) -> Self {
+        if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
+            if let Ok(header_value) = HeaderValue::from_str(value) {
+                self.headers.insert(header_name, header_value);
+            }
+        }
+
+        self
     }
 }
 
-impl<T> IntoResponse for ApiResponse<T>
-where
-    T: Serialize,
-{
+impl<T: Into<Body>> IntoResponse for ApiResponse<T> {
     fn into_response(self) -> Response {
-        if let Some(jar) = self.cookies {
-            let mut response = jar.into_response();
-            *response.status_mut() = self.status;
-            response
-                .headers_mut()
-                .insert("Content-Type", "application/json".parse().unwrap());
-            *response.body_mut() = Body::from(serde_json::to_string(&self.body).unwrap());
-
-            response
+        let mut response = if let Some(jar) = self.cookies {
+            jar.into_response()
         } else {
-            let response = Response::builder()
-                .status(self.status)
-                .header("Content-Type", "application/json")
-                .body(Body::from(serde_json::to_string(&self.body).unwrap()))
-                .unwrap();
+            Response::default()
+        };
 
-            response
+        *response.status_mut() = self.status;
+        *response.body_mut() = self.body.map(Into::into).unwrap_or_else(|| Body::empty());
+
+        for (name, value) in self.headers.iter() {
+            response.headers_mut().insert(name, value.clone());
         }
+
+        response
     }
 }

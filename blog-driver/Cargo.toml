@@ -9,7 +9,7 @@ edition.workspace = true
 blog-adapter.workspace = true
 blog-app.workspace = true
 blog-domain.workspace = true
-axum = "0.7.4"
+axum = { version = "0.7.4", features = ["multipart"] }
 tokio = { version = "1.37.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
@@ -29,3 +29,4 @@ http = "1.1.0"
 serde_json = "1.0.134"
 cookie = "0.18.1"
 urlencoding = "2.1.3"
+infer = "0.19.0"
