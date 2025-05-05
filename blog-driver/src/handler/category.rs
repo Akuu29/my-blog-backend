@@ -41,7 +41,11 @@ pub async fn create_category<T: ICategoryRepository, U: ITokenRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::CREATED, Some(category), None))
+    Ok(ApiResponse::new(
+        StatusCode::CREATED,
+        Some(serde_json::to_string(&category).unwrap()),
+        None,
+    ))
 }
 
 pub async fn all_categories<T: ICategoryRepository>(
@@ -53,7 +57,11 @@ pub async fn all_categories<T: ICategoryRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(categories), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&categories).unwrap()),
+        None,
+    ))
 }
 
 pub async fn update_category<T: ICategoryRepository, U: ITokenRepository>(
@@ -76,7 +84,11 @@ pub async fn update_category<T: ICategoryRepository, U: ITokenRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(category), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&category).unwrap()),
+        None,
+    ))
 }
 
 pub async fn delete_category<T: ICategoryRepository, U: ITokenRepository>(
@@ -112,7 +124,7 @@ pub async fn find_articles_by_category<T: IArticlesByCategoryQueryService>(
 
     Ok(ApiResponse::new(
         StatusCode::OK,
-        Some(articles_by_category),
+        Some(serde_json::to_string(&articles_by_category).unwrap()),
         None,
     ))
 }

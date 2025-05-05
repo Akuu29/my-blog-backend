@@ -42,7 +42,11 @@ pub async fn create<T: IUserRepository, U: ITokenRepository>(
         .await
         .or(Err(StatusCode::BAD_REQUEST))?;
 
-    Ok(ApiResponse::new(StatusCode::CREATED, Some(user), None))
+    Ok(ApiResponse::new(
+        StatusCode::CREATED,
+        Some(serde_json::to_string(&user).unwrap()),
+        None,
+    ))
 }
 
 pub async fn find<T: IUserRepository>(
@@ -54,7 +58,11 @@ pub async fn find<T: IUserRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(user), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&user).unwrap()),
+        None,
+    ))
 }
 
 pub async fn update<T: IUserRepository>(
@@ -67,7 +75,11 @@ pub async fn update<T: IUserRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(user), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&user).unwrap()),
+        None,
+    ))
 }
 
 pub async fn delete<T: IUserRepository>(

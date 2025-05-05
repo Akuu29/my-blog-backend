@@ -66,7 +66,7 @@ where
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
-        Some(article_tags),
+        Some(serde_json::to_string(&article_tags).unwrap()),
         None,
     ))
 }

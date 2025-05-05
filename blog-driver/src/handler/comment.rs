@@ -20,7 +20,11 @@ pub async fn create_comment<T: ICommentRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::CREATED, Some(comment), None))
+    Ok(ApiResponse::new(
+        StatusCode::CREATED,
+        Some(serde_json::to_string(&comment).unwrap()),
+        None,
+    ))
 }
 
 pub async fn find_comment<T: ICommentRepository>(
@@ -33,7 +37,11 @@ pub async fn find_comment<T: ICommentRepository>(
         None,
     )))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(comment), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&comment).unwrap()),
+        None,
+    ))
 }
 
 pub async fn find_by_article_id<T: ICommentRepository>(
@@ -45,7 +53,11 @@ pub async fn find_by_article_id<T: ICommentRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(comments), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&comments).unwrap()),
+        None,
+    ))
 }
 
 pub async fn update_comment<T: ICommentRepository>(
@@ -58,7 +70,11 @@ pub async fn update_comment<T: ICommentRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(comment), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&comment).unwrap()),
+        None,
+    ))
 }
 
 pub async fn delete_comment<T: ICommentRepository>(

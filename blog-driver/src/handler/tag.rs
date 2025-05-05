@@ -35,7 +35,11 @@ pub async fn create<T: ITagRepository, U: ITokenRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::CREATED, Some(tag), None))
+    Ok(ApiResponse::new(
+        StatusCode::CREATED,
+        Some(serde_json::to_string(&tag).unwrap()),
+        None,
+    ))
 }
 
 pub async fn all<T: ITagRepository>(
@@ -51,7 +55,11 @@ pub async fn all<T: ITagRepository>(
             None,
         )))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(tags), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&tags).unwrap()),
+        None,
+    ))
 }
 
 pub async fn delete<T: ITagRepository, U: ITokenRepository>(
@@ -91,5 +99,9 @@ pub async fn find_tags_by_article_id<T: ITagsAttachedArticleQueryService>(
             None,
         )))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(tags), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&tags).unwrap()),
+        None,
+    ))
 }

@@ -43,7 +43,11 @@ pub async fn create_article<T: IArticleRepository, U: ITokenRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::CREATED, Some(article), None))
+    Ok(ApiResponse::new(
+        StatusCode::CREATED,
+        Some(serde_json::to_string(&article).unwrap()),
+        None,
+    ))
 }
 
 pub async fn find_article<T: IArticleRepository>(
@@ -55,7 +59,11 @@ pub async fn find_article<T: IArticleRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(article), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&article).unwrap()),
+        None,
+    ))
 }
 
 pub async fn all_articles<T: IArticleRepository>(
@@ -74,7 +82,11 @@ pub async fn all_articles<T: IArticleRepository>(
     let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor);
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(paged_body), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&paged_body).unwrap()),
+        None,
+    ))
 }
 
 pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
@@ -97,7 +109,11 @@ pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(article), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&article).unwrap()),
+        None,
+    ))
 }
 
 pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
@@ -148,5 +164,9 @@ pub async fn find_articles_by_tag<T: IArticlesByTagQueryService>(
     let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor);
 
-    Ok(ApiResponse::new(StatusCode::OK, Some(paged_body), None))
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&paged_body).unwrap()),
+        None,
+    ))
 }

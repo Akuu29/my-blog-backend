@@ -62,7 +62,7 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
 
             Ok(ApiResponse::new(
                 StatusCode::OK,
-                Some(api_credentials),
+                Some(serde_json::to_string(&api_credentials).unwrap()),
                 Some(updated_jar),
             ))
         }
@@ -97,7 +97,7 @@ pub async fn verify_id_token<S: ITokenRepository, T: IUserRepository>(
 
                     Ok(ApiResponse::new(
                         StatusCode::OK,
-                        Some(api_credentials),
+                        Some(serde_json::to_string(&api_credentials).unwrap()),
                         Some(updated_jar),
                     ))
                 }
@@ -143,7 +143,7 @@ pub async fn refresh_access_token<S: ITokenRepository, T: IUserRepository>(
 
             Ok(ApiResponse::new(
                 StatusCode::OK,
-                Some(api_credentials),
+                Some(serde_json::to_string(&api_credentials).unwrap()),
                 None,
             ))
         }
