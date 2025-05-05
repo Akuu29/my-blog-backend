@@ -9,6 +9,7 @@ use validator::Validate;
 #[sqlx(type_name = "article_status", rename_all = "lowercase")]
 pub enum ArticleStatus {
     Draft,
+    Private,
     Published,
     Deleted,
 }
@@ -16,8 +17,8 @@ pub enum ArticleStatus {
 #[derive(Debug, Clone, Serialize, FromRow, PartialEq)]
 pub struct Article {
     pub id: i32,
-    pub title: String,
-    pub body: String,
+    pub title: Option<String>,
+    pub body: Option<String>,
     pub status: ArticleStatus,
     #[serde(rename = "categoryId")]
     pub category_id: Option<i32>,
@@ -30,9 +31,9 @@ pub struct Article {
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct NewArticle {
     #[validate(length(min = 1, max = 85, message = "title length must be 1 to 85"))]
-    pub title: String,
+    pub title: Option<String>,
     #[validate(length(min = 1, message = "body length mut be 1 or more"))]
-    pub body: String,
+    pub body: Option<String>,
     pub status: ArticleStatus,
     #[serde(rename = "categoryId")]
     pub category_id: Option<i32>,
