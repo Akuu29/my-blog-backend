@@ -244,7 +244,7 @@ impl AppRouter {
             .route("/", post(image::create::<T, U>).get(image::all::<T>))
             .route(
                 "/:image_id",
-                get(image::find::<T>).delete(image::delete::<T, U, E>),
+                get(image::find_data::<T>).delete(image::delete::<T, U, E>),
             )
             .layer(Extension(Arc::new(image_app_service)))
             .layer(Extension(Arc::new(article_image_query_service)))

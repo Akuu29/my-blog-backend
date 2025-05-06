@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use blog_app::query_service::article_image::i_article_image_query_service::IArticleImageQueryService;
-use blog_domain::model::images::image::Image;
+use blog_domain::model::images::image::ImageDataProps;
 use sqlx::types::Uuid;
 
 #[derive(Debug, Clone)]
@@ -17,7 +17,7 @@ impl ArticleImageQueryService {
 #[async_trait]
 impl IArticleImageQueryService for ArticleImageQueryService {
     async fn is_image_owned_by_user(&self, image_id: i32, user_id: Uuid) -> anyhow::Result<bool> {
-        let image_count = sqlx::query_as::<_, Image>(
+        let images = sqlx::query_as::<_, ImageDataProps>(
             r#"
             SELECT
                 *
@@ -37,6 +37,6 @@ impl IArticleImageQueryService for ArticleImageQueryService {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(image_count.len() > 0)
+        Ok(images.len() > 0)
     }
 }

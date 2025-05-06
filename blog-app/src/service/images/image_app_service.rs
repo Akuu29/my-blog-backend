@@ -1,6 +1,6 @@
 use blog_domain::model::images::{
     i_image_repository::IImageRepository,
-    image::{Image, NewImage},
+    image::{ImageData, ImageDataProps, NewImage},
     image_filter::ImageFilter,
 };
 
@@ -13,7 +13,7 @@ impl<T: IImageRepository> ImageAppService<T> {
         Self { repository }
     }
 
-    pub async fn create(&self, new_image: NewImage) -> anyhow::Result<Image> {
+    pub async fn create(&self, new_image: NewImage) -> anyhow::Result<ImageDataProps> {
         let result = self.repository.create(new_image).await;
 
         let mut image = result.unwrap();
@@ -34,7 +34,7 @@ impl<T: IImageRepository> ImageAppService<T> {
         Ok(image)
     }
 
-    pub async fn all(&self, filter: ImageFilter) -> anyhow::Result<Vec<Image>> {
+    pub async fn all(&self, filter: ImageFilter) -> anyhow::Result<Vec<ImageDataProps>> {
         let mut images = self.repository.all(filter).await?;
 
         for image in images.iter_mut() {
@@ -56,8 +56,8 @@ impl<T: IImageRepository> ImageAppService<T> {
         Ok(images)
     }
 
-    pub async fn find(&self, image_id: i32) -> anyhow::Result<Image> {
-        self.repository.find(image_id).await
+    pub async fn find_data(&self, image_id: i32) -> anyhow::Result<ImageData> {
+        self.repository.find_data(image_id).await
     }
 
     pub async fn delete(&self, image_id: i32) -> anyhow::Result<()> {

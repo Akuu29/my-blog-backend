@@ -8,12 +8,18 @@ use std::fmt;
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, FromRow)]
-pub struct Image {
+pub struct ImageData {
+    #[serde(rename = "mimeType")]
+    pub mime_type: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+pub struct ImageDataProps {
     pub id: i32,
     pub name: String,
     #[serde(rename = "mimeType")]
     pub mime_type: String,
-    pub data: Option<Vec<u8>>,
     pub url: Option<String>,
     #[serde(rename = "storageType")]
     pub storage_type: String,

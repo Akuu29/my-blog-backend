@@ -123,22 +123,22 @@ where
     ))
 }
 
-pub async fn find<T>(
+pub async fn find_data<T>(
     Extension(image_app_service): Extension<Arc<ImageAppService<T>>>,
     Path(image_id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiResponse<()>>
 where
     T: IImageRepository,
 {
-    let image = image_app_service
-        .find(image_id)
+    let image_data = image_app_service
+        .find_data(image_id)
         .await
         .map_err(|_| ApiResponse::new(StatusCode::BAD_REQUEST, None, None))?;
 
-    let response = ApiResponse::new(StatusCode::OK, Some(image.data.clone().unwrap()), None)
-        .with_header("Content-Type", &image.mime_type)
+    let response = ApiResponse::new(StatusCode::OK, Some(image_data.data.clone()), None)
+        .with_header("Content-Type", &image_data.mime_type)
         .with_header("Content-Disposition", "attachment")
-        .with_header("Content-Length", &image.data.unwrap().len().to_string());
+        .with_header("Content-Length", &image_data.data.len().to_string());
 
     Ok(response)
 }

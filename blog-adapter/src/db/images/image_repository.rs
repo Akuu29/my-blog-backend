@@ -2,7 +2,7 @@ use crate::db::utils::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::images::{
     i_image_repository::IImageRepository,
-    image::{Image, NewImage},
+    image::{ImageData, ImageDataProps, NewImage},
     image_filter::ImageFilter,
 };
 use sqlx::QueryBuilder;
@@ -20,8 +20,8 @@ impl ImageRepository {
 
 #[async_trait]
 impl IImageRepository for ImageRepository {
-    async fn create(&self, new_image: NewImage) -> anyhow::Result<Image> {
-        let image = sqlx::query_as::<_, Image>(
+    async fn create(&self, new_image: NewImage) -> anyhow::Result<ImageDataProps> {
+        let image = sqlx::query_as::<_, ImageDataProps>(
             r#"
             INSERT INTO images (
                 name,
@@ -58,14 +58,13 @@ impl IImageRepository for ImageRepository {
         Ok(image)
     }
 
-    async fn all(&self, filter: ImageFilter) -> anyhow::Result<Vec<Image>> {
+    async fn all(&self, filter: ImageFilter) -> anyhow::Result<Vec<ImageDataProps>> {
         let mut query = QueryBuilder::new(
             r"
             SELECT
                 id,
                 name,
                 mime_type,
-                data,
                 url,
                 storage_type,
                 article_id,
@@ -88,7 +87,7 @@ impl IImageRepository for ImageRepository {
         query.push(" ORDER BY id DESC; ");
 
         let images = query
-            .build_query_as::<Image>()
+            .build_query_as::<ImageDataProps>()
             .bind(filter.article_id)
             .fetch_all(&self.pool)
             .await?;
@@ -96,10 +95,13 @@ impl IImageRepository for ImageRepository {
         Ok(images)
     }
 
-    async fn find(&self, image_id: i32) -> anyhow::Result<Image> {
-        let image = sqlx::query_as::<_, Image>(
+    async fn find_data(&self, image_id: i32) -> anyhow::Result<ImageData> {
+        let image_data = sqlx::query_as::<_, ImageData>(
             r#"
-            SELECT * FROM images
+            SELECT
+                mime_type,
+                data
+            FROM images
             WHERE id = $1;
             "#,
         )
@@ -111,7 +113,7 @@ impl IImageRepository for ImageRepository {
             e => RepositoryError::Unexpected(e.to_string()),
         })?;
 
-        Ok(image)
+        Ok(image_data)
     }
 
     async fn delete(&self, image_id: i32) -> anyhow::Result<()> {
