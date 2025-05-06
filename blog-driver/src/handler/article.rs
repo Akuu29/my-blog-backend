@@ -104,6 +104,17 @@ pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
             ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
         })?;
 
+    let pre_article = article_app_service
+        .find(article_id, None)
+        .await
+        .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
+
+    if (payload.title.is_none() && pre_article.title.is_none())
+        || (payload.body.is_none() && pre_article.body.is_none())
+    {
+        return Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None));
+    }
+
     let article = article_app_service
         .update(article_id, payload)
         .await

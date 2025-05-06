@@ -143,8 +143,12 @@ impl IArticleRepository for ArticleRepository {
             RETURNING *;
             "#,
         )
-        .bind(payload.title.unwrap_or(pre_payload.title.unwrap()))
-        .bind(payload.body.unwrap_or(pre_payload.body.unwrap()))
+        .bind(
+            payload
+                .title
+                .unwrap_or(pre_payload.title.unwrap_or_default()),
+        )
+        .bind(payload.body.unwrap_or(pre_payload.body.unwrap_or_default()))
         .bind(payload.status.unwrap_or(pre_payload.status))
         .bind(payload.category_id)
         .bind(article_id)
