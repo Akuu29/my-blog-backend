@@ -4,8 +4,11 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use blog_app::service::{
-    images::image_app_service::ImageAppService, tokens::token_app_service::TokenAppService,
+use blog_app::{
+    query_service::article_image::i_article_image_query_service::IArticleImageQueryService,
+    service::{
+        images::image_app_service::ImageAppService, tokens::token_app_service::TokenAppService,
+    },
 };
 use blog_domain::model::{
     images::{
@@ -120,20 +123,31 @@ where
     Ok(response)
 }
 
-pub async fn delete<T, U>(
+pub async fn delete<T, U, E>(
     Extension(image_app_service): Extension<Arc<ImageAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    Extension(article_image_query_service): Extension<Arc<E>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(image_id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiResponse<()>>
 where
     T: IImageRepository,
     U: ITokenRepository,
+    E: IArticleImageQueryService,
 {
-    let _token_data = token_app_service
+    let token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|_| ApiResponse::new(StatusCode::UNAUTHORIZED, None, None))?;
+
+    let is_image_owned_by_user = article_image_query_service
+        .is_image_owned_by_user(image_id, token_data.claims.sub())
+        .await
+        .map_err(|_| ApiResponse::new(StatusCode::BAD_REQUEST, None, None))?;
+
+    if !is_image_owned_by_user {
+        return Err(ApiResponse::new(StatusCode::FORBIDDEN, None, None));
+    }
 
     image_app_service
         .delete(image_id)

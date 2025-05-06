@@ -10,6 +10,7 @@ use blog_adapter::{
     },
     idp::tokens::token_repository::TokenRepository,
     query_service::{
+        article_image::article_image_query_service::ArticleImageQueryService,
         articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
         articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService,
         tags_attached_article::tags_attached_article_query_service::TagsAttachedArticleQueryService,
@@ -65,6 +66,7 @@ pub async fn run() {
     let articles_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
     let article_by_tag_query_service = ArticlesByTagQueryService::new(pool.clone());
     let tags_attached_article_query_service = TagsAttachedArticleQueryService::new(pool.clone());
+    let article_image_query_service = ArticleImageQueryService::new(pool.clone());
 
     let client_addr = std::env::var("CLIENT_ADDR").expect("undefined CLIENT_ADDR");
     let cors_layer = CorsLayer::new()
@@ -91,6 +93,7 @@ pub async fn run() {
         article_by_tag_query_service,
         tags_attached_article_query_service,
         image_app_service,
+        article_image_query_service,
     );
     let domain = std::env::var("DOMAIN").expect("undefined ADDR");
     let lister = tokio::net::TcpListener::bind(&domain)
