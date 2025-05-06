@@ -3,16 +3,17 @@ use async_trait::async_trait;
 use blog_domain::model::images::{
     i_image_repository::IImageRepository,
     image::{Image, NewImage},
+    image_filter::ImageFilter,
 };
-use sqlx::PgPool;
+use sqlx::QueryBuilder;
 
 #[derive(Debug, Clone)]
 pub struct ImageRepository {
-    pool: PgPool,
+    pool: sqlx::PgPool,
 }
 
 impl ImageRepository {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
     }
 }
@@ -55,6 +56,44 @@ impl IImageRepository for ImageRepository {
         })?;
 
         Ok(image)
+    }
+
+    async fn all(&self, filter: ImageFilter) -> anyhow::Result<Vec<Image>> {
+        let mut query = QueryBuilder::new(
+            r"
+            SELECT
+                id,
+                name,
+                mime_type,
+                data,
+                url,
+                storage_type,
+                article_id,
+                created_at,
+                updated_at
+            FROM images
+            ",
+        );
+
+        let mut conditions = vec![];
+
+        if filter.article_id.is_some() {
+            conditions.push("article_id = $1");
+        }
+
+        if !conditions.is_empty() {
+            query.push(" WHERE ").push(conditions.join(" AND "));
+        }
+
+        query.push(" ORDER BY id DESC; ");
+
+        let images = query
+            .build_query_as::<Image>()
+            .bind(filter.article_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(images)
     }
 
     async fn find(&self, image_id: i32) -> anyhow::Result<Image> {

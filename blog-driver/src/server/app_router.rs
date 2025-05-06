@@ -241,7 +241,7 @@ impl AppRouter {
         E: IArticleImageQueryService,
     {
         Router::new()
-            .route("/", post(image::create::<T, U>))
+            .route("/", post(image::create::<T, U>).get(image::all::<T>))
             .route(
                 "/:image_id",
                 get(image::find::<T>).delete(image::delete::<T, U, E>),

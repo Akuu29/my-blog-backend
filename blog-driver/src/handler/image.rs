@@ -1,6 +1,6 @@
 use crate::model::{api_response::ApiResponse, auth_token::AuthToken};
 use axum::{
-    extract::{Extension, Multipart, Path},
+    extract::{Extension, Multipart, Path, Query},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -14,6 +14,7 @@ use blog_domain::model::{
     images::{
         i_image_repository::IImageRepository,
         image::{NewImage, StorageType},
+        image_filter::ImageFilter,
     },
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
@@ -99,6 +100,25 @@ where
     Ok(ApiResponse::new(
         StatusCode::CREATED,
         Some(serde_json::to_string(&image).unwrap()),
+        None,
+    ))
+}
+
+pub async fn all<T>(
+    Extension(image_app_service): Extension<Arc<ImageAppService<T>>>,
+    Query(filter): Query<ImageFilter>,
+) -> Result<impl IntoResponse, ApiResponse<()>>
+where
+    T: IImageRepository,
+{
+    let images = image_app_service
+        .all(filter)
+        .await
+        .map_err(|_| ApiResponse::new(StatusCode::BAD_REQUEST, None, None))?;
+
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&images).unwrap()),
         None,
     ))
 }

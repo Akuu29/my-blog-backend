@@ -1,6 +1,7 @@
 use blog_domain::model::images::{
     i_image_repository::IImageRepository,
     image::{Image, NewImage},
+    image_filter::ImageFilter,
 };
 
 pub struct ImageAppService<T: IImageRepository> {
@@ -31,6 +32,28 @@ impl<T: IImageRepository> ImageAppService<T> {
         image.url = Some(image_url);
 
         Ok(image)
+    }
+
+    pub async fn all(&self, filter: ImageFilter) -> anyhow::Result<Vec<Image>> {
+        let mut images = self.repository.all(filter).await?;
+
+        for image in images.iter_mut() {
+            let image_url = match image.storage_type.to_string().as_str() {
+                "database" => {
+                    format!(
+                        "{}://{}/images/{}",
+                        std::env::var("PROTOCOL").unwrap(),
+                        std::env::var("DOMAIN").unwrap(),
+                        image.id
+                    )
+                }
+                _ => image.url.as_ref().unwrap().to_string(),
+            };
+
+            image.url = Some(image_url);
+        }
+
+        Ok(images)
     }
 
     pub async fn find(&self, image_id: i32) -> anyhow::Result<Image> {
