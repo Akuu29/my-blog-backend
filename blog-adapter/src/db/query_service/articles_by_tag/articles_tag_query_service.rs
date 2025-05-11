@@ -1,6 +1,8 @@
 use async_trait::async_trait;
-use blog_app::query_service::articles_by_tag::i_articles_by_tag_query_service::IArticlesByTagQueryService;
-use blog_domain::model::articles::article::Article;
+use blog_app::query_service::articles_by_tag::i_articles_by_tag_query_service::{
+    ArticlesByTagFilter, IArticlesByTagQueryService,
+};
+use blog_domain::model::{articles::article::Article, common::pagination::Pagination};
 use sqlx::query_builder::QueryBuilder;
 
 #[derive(Debug, Clone)]
@@ -18,9 +20,8 @@ impl ArticlesByTagQueryService {
 impl IArticlesByTagQueryService for ArticlesByTagQueryService {
     async fn find_article_title_by_tag(
         &self,
-        tag_ids: Vec<i32>,
-        cursor: Option<i32>,
-        per_page: i32,
+        filter: ArticlesByTagFilter,
+        pagination: Pagination,
     ) -> anyhow::Result<Vec<Article>> {
         let mut query_builder = QueryBuilder::new(
             r#"
@@ -40,7 +41,7 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
             "#,
         );
 
-        if cursor.is_some() {
+        if pagination.cursor.is_some() {
             query_builder.push("AND a.id < $2");
         }
 
@@ -48,9 +49,9 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
 
         let articles = query_builder
             .build_query_as::<Article>()
-            .bind(tag_ids)
-            .bind(cursor)
-            .bind(per_page)
+            .bind(filter.tag_ids)
+            .bind(pagination.cursor)
+            .bind(pagination.per_page)
             .fetch_all(&self.pool)
             .await?;
 

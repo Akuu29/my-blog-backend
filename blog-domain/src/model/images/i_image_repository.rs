@@ -1,8 +1,12 @@
-use crate::model::images::{
-    image::{ImageData, ImageDataProps, NewImage},
-    image_filter::ImageFilter,
-};
+use crate::model::images::image::{ImageData, ImageDataProps, NewImage};
 use async_trait::async_trait;
+use serde::Deserialize;
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageFilter {
+    pub article_id: Option<i32>,
+}
 
 #[async_trait]
 pub trait IImageRepository: Clone + std::marker::Send + std::marker::Sync + 'static {

@@ -8,26 +8,22 @@ use std::fmt;
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ImageData {
-    #[serde(rename = "mimeType")]
     pub mime_type: String,
     pub data: Vec<u8>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ImageDataProps {
     pub id: i32,
     pub name: String,
-    #[serde(rename = "mimeType")]
     pub mime_type: String,
     pub url: Option<String>,
-    #[serde(rename = "storageType")]
     pub storage_type: String,
-    #[serde(rename = "articleId")]
     pub article_id: i32,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Local>,
-    #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Local>,
 }
 
@@ -46,10 +42,10 @@ impl fmt::Display for StorageType {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct NewImage {
     #[validate(length(min = 1, max = 255, message = "name length must be 1 to 255"))]
     pub name: String,
-    #[serde(rename = "mimeType")]
     #[validate(custom(function = "validate_mime_type"))]
     pub mime_type: String,
     #[validate(
@@ -62,9 +58,7 @@ pub struct NewImage {
     )]
     pub data: Vec<u8>,
     pub url: Option<String>,
-    #[serde(rename = "storageType")]
     pub storage_type: StorageType,
-    #[serde(rename = "articleId")]
     pub article_id: i32,
 }
 

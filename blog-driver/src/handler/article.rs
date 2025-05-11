@@ -1,35 +1,41 @@
 use crate::model::{
     api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
-    pagination::Pagination, validated_json::ValidatedJson,
-    validated_query_param::ValidatedQueryParam,
+    validated_json::ValidatedJson, validated_query_param::ValidatedQueryParam,
 };
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
 };
-use axum_extra::extract::Query;
-use blog_app::query_service::articles_by_tag::i_articles_by_tag_query_service::IArticlesByTagQueryService;
 use blog_app::{
+    query_service::articles_by_tag::i_articles_by_tag_query_service::{
+        ArticlesByTagFilter, IArticlesByTagQueryService,
+    },
     service::articles::article_app_service::ArticleAppService,
     service::tokens::token_app_service::TokenAppService,
 };
 use blog_domain::model::{
     articles::{
         article::{NewArticle, UpdateArticle},
-        i_article_repository::IArticleRepository,
+        i_article_repository::{ArticleFilter, IArticleRepository},
     },
+    common::pagination::Pagination,
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use validator::Validate;
 
-pub async fn create_article<T: IArticleRepository, U: ITokenRepository>(
+pub async fn create_article<T, U>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewArticle>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+) -> Result<impl IntoResponse, ApiResponse<()>>
+where
+    T: IArticleRepository,
+    U: ITokenRepository,
+{
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
@@ -50,12 +56,15 @@ pub async fn create_article<T: IArticleRepository, U: ITokenRepository>(
     ))
 }
 
-pub async fn find_article<T: IArticleRepository>(
+pub async fn find_article<T>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Path(article_id): Path<i32>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+) -> Result<impl IntoResponse, ApiResponse<()>>
+where
+    T: IArticleRepository,
+{
     let article = article_app_service
-        .find(article_id, None)
+        .find(article_id, ArticleFilter::default())
         .await
         .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
 
@@ -66,12 +75,29 @@ pub async fn find_article<T: IArticleRepository>(
     ))
 }
 
-pub async fn all_articles<T: IArticleRepository>(
+#[derive(Debug, Deserialize, Validate)]
+pub struct AllArticlesQueryParam {
+    #[serde(flatten)]
+    #[validate(nested)]
+    pub article: ArticleFilter,
+    #[serde(flatten)]
+    #[validate(nested)]
+    pub pagination: Pagination,
+}
+
+pub async fn all_articles<T>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
-    ValidatedQueryParam(pagination): ValidatedQueryParam<Pagination>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+    // QsQuery(query_param): QsQuery<AllArticlesQueryParam>,
+    ValidatedQueryParam(query_param): ValidatedQueryParam<AllArticlesQueryParam>,
+) -> Result<impl IntoResponse, ApiResponse<()>>
+where
+    T: IArticleRepository,
+{
+    let article_filter = query_param.article;
+    let pagination = query_param.pagination;
+
     let articles = article_app_service
-        .all(pagination.cursor, pagination.per_page)
+        .all(article_filter, pagination)
         .await
         .or(Err(ApiResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -89,13 +115,17 @@ pub async fn all_articles<T: IArticleRepository>(
     ))
 }
 
-pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
+pub async fn update_article<T, U>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     Path(article_id): Path<i32>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<UpdateArticle>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+) -> Result<impl IntoResponse, ApiResponse<()>>
+where
+    T: IArticleRepository,
+    U: ITokenRepository,
+{
     let _access_token_data = token_app_service
         .verify_access_token(token)
         .await
@@ -105,7 +135,7 @@ pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
         })?;
 
     let pre_article = article_app_service
-        .find(article_id, None)
+        .find(article_id, ArticleFilter::default())
         .await
         .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
 
@@ -127,12 +157,16 @@ pub async fn update_article<T: IArticleRepository, U: ITokenRepository>(
     ))
 }
 
-pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
+pub async fn delete_article<T, U>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(article_id): Path<i32>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+) -> Result<impl IntoResponse, ApiResponse<()>>
+where
+    T: IArticleRepository,
+    U: ITokenRepository,
+{
     let _access_token_data = token_app_service
         .verify_access_token(token)
         .await
@@ -154,17 +188,28 @@ pub async fn delete_article<T: IArticleRepository, U: ITokenRepository>(
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
 
-#[derive(Debug, Deserialize)]
-pub struct TagIds {
-    pub ids: Vec<i32>,
+#[derive(Debug, Deserialize, Validate)]
+pub struct FindArticlesByTagQueryParam {
+    #[serde(flatten)]
+    #[validate(nested)]
+    pub filter: ArticlesByTagFilter,
+    #[serde(flatten)]
+    #[validate(nested)]
+    pub pagination: Pagination,
 }
-pub async fn find_articles_by_tag<T: IArticlesByTagQueryService>(
+
+pub async fn find_articles_by_tag<T>(
     Extension(articles_by_tag_query_service): Extension<Arc<T>>,
-    Query(tag_ids): Query<TagIds>,
-    ValidatedQueryParam(pagination): ValidatedQueryParam<Pagination>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+    ValidatedQueryParam(query_param): ValidatedQueryParam<FindArticlesByTagQueryParam>,
+) -> Result<impl IntoResponse, ApiResponse<()>>
+where
+    T: IArticlesByTagQueryService,
+{
+    let filter = query_param.filter;
+    let pagination = query_param.pagination;
+
     let articles = articles_by_tag_query_service
-        .find_article_title_by_tag(tag_ids.ids, pagination.cursor, pagination.per_page)
+        .find_article_title_by_tag(filter, pagination)
         .await
         .or(Err(ApiResponse::new(
             StatusCode::INTERNAL_SERVER_ERROR,

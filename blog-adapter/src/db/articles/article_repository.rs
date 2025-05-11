@@ -1,9 +1,11 @@
 use crate::db::utils::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::model::articles::{
-    article::{Article, NewArticle, UpdateArticle},
-    article_filter::ArticleFilter,
-    i_article_repository::IArticleRepository,
+use blog_domain::model::{
+    articles::{
+        article::{Article, NewArticle, UpdateArticle},
+        i_article_repository::{ArticleFilter, IArticleRepository},
+    },
+    common::pagination::Pagination,
 };
 use sqlx::{types::Uuid, QueryBuilder};
 
@@ -54,7 +56,7 @@ impl IArticleRepository for ArticleRepository {
     async fn find(
         &self,
         article_id: i32,
-        article_filter: Option<ArticleFilter>,
+        article_filter: ArticleFilter,
     ) -> anyhow::Result<Article> {
         let mut query = QueryBuilder::new(
             r#"
@@ -73,31 +75,34 @@ impl IArticleRepository for ArticleRepository {
 
         let mut conditions = Vec::new();
 
-        let mut user_id: Option<Uuid> = None;
-        if let Some(article_filter) = article_filter {
-            if article_filter.user_id.is_some() {
-                conditions.push("user_id = $2");
-                user_id = article_filter.user_id;
-            }
-        }
+        if article_filter.user_id.is_some() {
+            conditions.push("user_id = $2");
+        };
+
+        if article_filter.status.is_some() {
+            conditions.push("status = $3");
+        };
 
         if !conditions.is_empty() {
             query.push(" AND ").push(conditions.join(" AND "));
         }
 
-        query.push(" ORDER BY id DESC; ");
-
         let article = query
             .build_query_as::<Article>()
             .bind(article_id)
-            .bind(user_id)
+            .bind(article_filter.user_id)
+            .bind(article_filter.status)
             .fetch_one(&self.pool)
             .await?;
 
         Ok(article)
     }
 
-    async fn all(&self, cursor: Option<i32>, per_page: i32) -> anyhow::Result<Vec<Article>> {
+    async fn all(
+        &self,
+        article_filter: ArticleFilter,
+        pagination: Pagination,
+    ) -> anyhow::Result<Vec<Article>> {
         let mut query_builder = QueryBuilder::new(
             r#"
             SELECT
@@ -112,17 +117,32 @@ impl IArticleRepository for ArticleRepository {
             "#,
         );
 
-        if cursor.is_some() {
-            query_builder.push("WHERE id < $1");
+        let mut conditions = Vec::new();
+
+        if article_filter.user_id.is_some() {
+            conditions.push("user_id = $1");
         }
 
-        query_builder.push("ORDER BY id DESC LIMIT $2;");
+        if article_filter.status.is_some() {
+            conditions.push("status = $2");
+        }
 
-        let query = query_builder.build_query_as::<Article>();
+        if pagination.cursor.is_some() {
+            conditions.push("id < $3");
+        }
 
-        let articles = query
-            .bind(cursor)
-            .bind(per_page)
+        if !conditions.is_empty() {
+            query_builder.push(" WHERE ").push(conditions.join(" AND "));
+        }
+
+        query_builder.push(" ORDER BY id DESC LIMIT $4;");
+
+        let articles = query_builder
+            .build_query_as::<Article>()
+            .bind(article_filter.user_id)
+            .bind(article_filter.status)
+            .bind(pagination.cursor)
+            .bind(pagination.per_page)
             .fetch_all(&self.pool)
             .await?;
 
@@ -130,7 +150,7 @@ impl IArticleRepository for ArticleRepository {
     }
 
     async fn update(&self, article_id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
-        let pre_payload = self.find(article_id, None).await?;
+        let pre_payload = self.find(article_id, ArticleFilter::default()).await?;
         let article = sqlx::query_as::<_, Article>(
             r#"
             UPDATE articles set

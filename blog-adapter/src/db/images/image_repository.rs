@@ -1,9 +1,8 @@
 use crate::db::utils::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::images::{
-    i_image_repository::IImageRepository,
+    i_image_repository::{IImageRepository, ImageFilter},
     image::{ImageData, ImageDataProps, NewImage},
-    image_filter::ImageFilter,
 };
 use sqlx::QueryBuilder;
 

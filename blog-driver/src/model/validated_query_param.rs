@@ -1,10 +1,11 @@
 use axum::{
     async_trait,
-    extract::{FromRequest, Query, Request},
+    extract::{FromRequest, Request},
     http::StatusCode,
 };
 use serde::de::DeserializeOwned;
 use validator::Validate;
+
 #[derive(Debug)]
 pub struct ValidatedQueryParam<T>(pub T);
 
@@ -16,15 +17,14 @@ where
 {
     type Rejection = (StatusCode, String);
 
-    async fn from_request(req: Request, state: &B) -> Result<Self, Self::Rejection> {
-        let Query(val) = Query::<T>::from_request(req, state)
-            .await
-            .map_err(|rejection| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("Invalid query param: {}", rejection),
-                )
-            })?;
+    async fn from_request(req: Request, _: &B) -> Result<Self, Self::Rejection> {
+        let query_string = req.uri().query().unwrap_or_default();
+        let val = serde_qs::from_str::<T>(query_string).map_err(|rejection| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid query param: {}", rejection),
+            )
+        })?;
 
         val.validate().map_err(|rejection| {
             (

@@ -6,12 +6,11 @@ use sqlx::{
 use validator::Validate;
 
 #[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Tag {
     pub id: i32,
     pub name: String,
-    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Local>,
-    #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Local>,
 }
 

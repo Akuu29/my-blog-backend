@@ -1,7 +1,6 @@
 use blog_domain::model::images::{
-    i_image_repository::IImageRepository,
+    i_image_repository::{IImageRepository, ImageFilter},
     image::{ImageData, ImageDataProps, NewImage},
-    image_filter::ImageFilter,
 };
 
 pub struct ImageAppService<T: IImageRepository> {
@@ -21,8 +20,8 @@ impl<T: IImageRepository> ImageAppService<T> {
             "database" => {
                 format!(
                     "{}://{}/images/{}",
-                    std::env::var("PROTOCOL").unwrap(),
-                    std::env::var("DOMAIN").unwrap(),
+                    std::env::var("GATEWAY_PROTOCOL").unwrap(),
+                    std::env::var("GATEWAY_DOMAIN").unwrap(),
                     image.id
                 )
             }
@@ -42,8 +41,8 @@ impl<T: IImageRepository> ImageAppService<T> {
                 "database" => {
                     format!(
                         "{}://{}/images/{}",
-                        std::env::var("PROTOCOL").unwrap(),
-                        std::env::var("DOMAIN").unwrap(),
+                        std::env::var("GATEWAY_PROTOCOL").unwrap(),
+                        std::env::var("GATEWAY_DOMAIN").unwrap(),
                         image.id
                     )
                 }

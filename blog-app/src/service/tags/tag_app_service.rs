@@ -1,7 +1,6 @@
 use blog_domain::model::tags::{
-    i_tag_repository::ITagRepository,
+    i_tag_repository::{ITagRepository, TagFilter},
     tag::{NewTag, Tag},
-    tag_filter::TagFilter,
 };
 use sqlx::types::Uuid;
 

@@ -6,6 +6,7 @@ use sqlx::{
 use validator::Validate;
 
 #[derive(Debug, Clone, Serialize, FromRow, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Comment {
     pub id: i32,
     pub article_id: i32,
@@ -15,6 +16,7 @@ pub struct Comment {
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct NewComment {
     pub article_id: i32,
     #[validate(length(min = 1, message = "body length must be 1 or more"))]

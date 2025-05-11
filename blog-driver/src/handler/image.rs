@@ -12,9 +12,8 @@ use blog_app::{
 };
 use blog_domain::model::{
     images::{
-        i_image_repository::IImageRepository,
+        i_image_repository::{IImageRepository, ImageFilter},
         image::{NewImage, StorageType},
-        image_filter::ImageFilter,
     },
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };

@@ -1,9 +1,9 @@
 use serde::Serialize;
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PagedBody<T> {
     items: Vec<T>,
-    #[serde(rename = "nextCursor")]
     next_cursor: Option<i32>,
 }
 

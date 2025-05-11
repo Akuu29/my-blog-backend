@@ -9,8 +9,8 @@ use blog_domain::model::{
     article_tags::{
         article_tags::ArticleAttachedTags, i_article_tags_repository::IArticleTagsRepository,
     },
-    articles::{article_filter::ArticleFilter, i_article_repository::IArticleRepository},
-    tags::{i_tag_repository::ITagRepository, tag_filter::TagFilter},
+    articles::i_article_repository::{ArticleFilter, IArticleRepository},
+    tags::i_tag_repository::{ITagRepository, TagFilter},
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
 use std::sync::Arc;
@@ -42,7 +42,7 @@ where
         ..Default::default()
     };
     let article = article_app_service
-        .find(payload.article_id, Some(article_filter))
+        .find(payload.article_id, article_filter)
         .await
         .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
 

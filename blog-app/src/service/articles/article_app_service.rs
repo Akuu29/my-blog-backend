@@ -1,7 +1,9 @@
-use blog_domain::model::articles::{
-    article::{Article, NewArticle, UpdateArticle},
-    article_filter::ArticleFilter,
-    i_article_repository::IArticleRepository,
+use blog_domain::model::{
+    articles::{
+        article::{Article, NewArticle, UpdateArticle},
+        i_article_repository::{ArticleFilter, IArticleRepository},
+    },
+    common::pagination::Pagination,
 };
 use sqlx::types::Uuid;
 
@@ -21,13 +23,17 @@ impl<T: IArticleRepository> ArticleAppService<T> {
     pub async fn find(
         &self,
         article_id: i32,
-        article_filter: Option<ArticleFilter>,
+        article_filter: ArticleFilter,
     ) -> anyhow::Result<Article> {
         self.repository.find(article_id, article_filter).await
     }
 
-    pub async fn all(&self, cursor: Option<i32>, per_page: i32) -> anyhow::Result<Vec<Article>> {
-        self.repository.all(cursor, per_page).await
+    pub async fn all(
+        &self,
+        article_filter: ArticleFilter,
+        pagination: Pagination,
+    ) -> anyhow::Result<Vec<Article>> {
+        self.repository.all(article_filter, pagination).await
     }
 
     pub async fn update(&self, article_id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {

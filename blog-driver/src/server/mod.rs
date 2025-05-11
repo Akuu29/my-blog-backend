@@ -5,16 +5,18 @@ use blog_adapter::{
         article_tags::article_tags_repository::ArticleTagsRepository,
         articles::article_repository::ArticleRepository,
         categories::category_repository::CategoryRepository,
-        comments::comment_repository::CommentRepository, images::image_repository::ImageRepository,
-        tags::tag_repository::TagRepository, users::user_repository::UserRepository,
+        comments::comment_repository::CommentRepository,
+        images::image_repository::ImageRepository,
+        query_service::{
+            article_image::article_image_query_service::ArticleImageQueryService,
+            articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
+            articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService,
+            tags_attached_article::tags_attached_article_query_service::TagsAttachedArticleQueryService,
+        },
+        tags::tag_repository::TagRepository,
+        users::user_repository::UserRepository,
     },
     idp::tokens::token_repository::TokenRepository,
-    query_service::{
-        article_image::article_image_query_service::ArticleImageQueryService,
-        articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
-        articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService,
-        tags_attached_article::tags_attached_article_query_service::TagsAttachedArticleQueryService,
-    },
 };
 use blog_app::service::{
     article_tags::article_tags_app_service::ArticleTagsAppService,
@@ -95,7 +97,7 @@ pub async fn run() {
         image_app_service,
         article_image_query_service,
     );
-    let domain = std::env::var("DOMAIN").expect("undefined ADDR");
+    let domain = std::env::var("INTERNAL_API_DOMAIN").expect("undefined INTERNAL_API_DOMAIN");
     let lister = tokio::net::TcpListener::bind(&domain)
         .await
         .expect("failed to bind");

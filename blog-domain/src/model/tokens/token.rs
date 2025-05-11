@@ -91,8 +91,8 @@ impl RefreshTokenClaims {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ApiCredentials {
-    #[serde(rename = "accessToken")]
     access_token: String,
 }
 
