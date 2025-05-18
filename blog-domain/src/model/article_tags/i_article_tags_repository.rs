@@ -3,5 +3,7 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait IArticleTagsRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
-    async fn delete_insert(&self, payload: ArticleAttachedTags) -> anyhow::Result<Vec<ArticleTag>>;
+    async fn tx_begin(&self) -> anyhow::Result<sqlx::Transaction<'static, sqlx::Postgres>>;
+    async fn delete(&self, article_id: i32) -> anyhow::Result<()>;
+    async fn bulk_insert(&self, payload: ArticleAttachedTags) -> anyhow::Result<Vec<ArticleTag>>;
 }

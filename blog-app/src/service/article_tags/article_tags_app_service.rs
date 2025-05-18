@@ -16,6 +16,24 @@ impl<T: IArticleTagsRepository> ArticleTagsAppService<T> {
         &self,
         payload: ArticleAttachedTags,
     ) -> anyhow::Result<Vec<ArticleTag>> {
-        self.repository.delete_insert(payload).await
+        let tx = self.repository.tx_begin().await?;
+
+        let delete_article_tags_result = self.repository.delete(payload.article_id).await;
+        if delete_article_tags_result.is_err() {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(delete_article_tags_result.err().unwrap()));
+        }
+
+        let bulk_insert_article_tags_result = self.repository.bulk_insert(payload).await;
+        if bulk_insert_article_tags_result.is_err() {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(bulk_insert_article_tags_result
+                .err()
+                .unwrap()));
+        }
+
+        tx.commit().await?;
+
+        Ok(bulk_insert_article_tags_result.unwrap())
     }
 }

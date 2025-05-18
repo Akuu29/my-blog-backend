@@ -18,30 +18,35 @@ impl ArticleTagsRepository {
 
 #[async_trait]
 impl IArticleTagsRepository for ArticleTagsRepository {
-    async fn delete_insert(&self, payload: ArticleAttachedTags) -> anyhow::Result<Vec<ArticleTag>> {
-        let tx = self.pool.begin().await?;
+    async fn tx_begin(&self) -> anyhow::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+        let tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| RepositoryError::Unexpected(e.to_string()))?;
 
-        // Delete all attached tags from the article
-        let delete_result = sqlx::query!(
+        Ok(tx)
+    }
+
+    async fn delete(&self, article_id: i32) -> anyhow::Result<()> {
+        sqlx::query(
             r#"
             DELETE FROM article_tags
             WHERE article_id = $1;
             "#,
-            payload.article_id
         )
+        .bind(article_id)
         .execute(&self.pool)
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
             e => RepositoryError::Unexpected(e.to_string()),
-        });
+        })?;
 
-        if delete_result.is_err() {
-            tx.rollback().await?;
-            return Err(anyhow::anyhow!(delete_result.err().unwrap()));
-        }
+        Ok(())
+    }
 
-        // Bulk insert new article tags
+    async fn bulk_insert(&self, payload: ArticleAttachedTags) -> anyhow::Result<Vec<ArticleTag>> {
         let mut bulk_insert_query_string =
             String::from("INSERT INTO article_tags (article_id, tag_id) VALUES ");
         let mut params = Vec::new();
@@ -60,24 +65,11 @@ impl IArticleTagsRepository for ArticleTagsRepository {
             query = query.bind(article_id).bind(tag_id);
         }
 
-        let create_result = query
+        let article_tags = query
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unexpected(e.to_string()));
+            .map_err(|e| RepositoryError::Unexpected(e.to_string()))?;
 
-        match create_result {
-            Ok(article_tags) => {
-                tx.commit()
-                    .await
-                    .map_err(|e| RepositoryError::Unexpected(e.to_string()))?;
-                Ok(article_tags)
-            }
-            Err(e) => {
-                tx.rollback()
-                    .await
-                    .map_err(|e| RepositoryError::Unexpected(e.to_string()))?;
-                Err(anyhow::anyhow!(e))
-            }
-        }
+        Ok(article_tags)
     }
 }
