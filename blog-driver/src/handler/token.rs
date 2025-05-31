@@ -161,3 +161,22 @@ pub async fn refresh_access_token<S: ITokenRepository, T: IUserRepository>(
         },
     }
 }
+
+pub async fn reset_refresh_token(
+    jar: PrivateCookieJar,
+) -> Result<impl IntoResponse, ApiResponse<()>> {
+    let cookie = Cookie::build(("refresh_token", ""))
+        .http_only(true)
+        .max_age(Duration::days(30))
+        .path("/")
+        .same_site(SameSite::None)
+        .secure(true);
+
+    let updated_jar = jar.remove(cookie);
+
+    Ok(ApiResponse::<()>::new(
+        StatusCode::OK,
+        None,
+        Some(updated_jar),
+    ))
+}

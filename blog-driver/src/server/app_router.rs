@@ -115,6 +115,7 @@ impl AppRouter {
         Router::new()
             .route("/verify", get(token::verify_id_token::<T, U>))
             .route("/refresh", get(token::refresh_access_token::<T, U>))
+            .route("/reset", get(token::reset_refresh_token))
     }
 
     fn create_users_router<T, U>() -> Router<AppState>
