@@ -1,5 +1,6 @@
-use crate::model::{
-    api_response::ApiResponse, auth_token::AuthToken, validated_json::ValidatedJson,
+use crate::{
+    model::{api_response::ApiResponse, auth_token::AuthToken, validated_json::ValidatedJson},
+    utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
     extract::{Extension, Path, Query},
@@ -19,24 +20,28 @@ use blog_domain::model::{
 use http::StatusCode;
 use std::sync::Arc;
 
+#[tracing::instrument(name = "create_tag", skip(tag_app_service, token_app_service, token))]
 pub async fn create<T: ITagRepository, U: ITokenRepository>(
     Extension(tag_app_service): Extension<Arc<TagAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewTag>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+) -> Result<impl IntoResponse, ApiResponse<String>> {
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
-            tracing::info!("failed to verify access token: {:?}", e);
-            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to verify access token")
         })?;
 
     let tag = tag_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to create tag")
+        })?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -45,18 +50,15 @@ pub async fn create<T: ITagRepository, U: ITokenRepository>(
     ))
 }
 
+#[tracing::instrument(name = "all_tags", skip(tag_app_service))]
 pub async fn all<T: ITagRepository>(
     Extension(tag_app_service): Extension<Arc<TagAppService<T>>>,
     Query(tag_filter): Query<TagFilter>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
-    let tags = tag_app_service
-        .all(tag_filter)
-        .await
-        .or(Err(ApiResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            None,
-            None,
-        )))?;
+) -> Result<impl IntoResponse, ApiResponse<String>> {
+    let tags = tag_app_service.all(tag_filter).await.map_err(|e| {
+        let app_err = AppError::from(e);
+        app_err.handle_error("Failed to get all tags")
+    })?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -65,42 +67,44 @@ pub async fn all<T: ITagRepository>(
     ))
 }
 
+#[tracing::instrument(name = "delete_tag", skip(tag_app_service, token_app_service, token))]
 pub async fn delete<T: ITagRepository, U: ITokenRepository>(
     Extension(tag_app_service): Extension<Arc<TagAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(tag_id): Path<i32>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+) -> Result<impl IntoResponse, ApiResponse<String>> {
     token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|_| ApiResponse::new(StatusCode::UNAUTHORIZED, None, None))?;
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to verify access token")
+        })?;
 
-    tag_app_service
-        .delete(tag_id)
-        .await
-        .map(|_| ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
-        .unwrap_or(ApiResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            None,
-            None,
-        ));
+    tag_app_service.delete(tag_id).await.map_err(|e| {
+        let app_err = AppError::from(e);
+        app_err.handle_error("Failed to delete tag")
+    })?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
 
+#[tracing::instrument(
+    name = "find_tags_by_article_id",
+    skip(tags_attached_article_query_service)
+)]
 pub async fn find_tags_by_article_id<T: ITagsAttachedArticleQueryService>(
     Extension(tags_attached_article_query_service): Extension<Arc<T>>,
     Path(article_id): Path<i32>,
-) -> Result<impl IntoResponse, ApiResponse<()>> {
+) -> Result<impl IntoResponse, ApiResponse<String>> {
     let tags = tags_attached_article_query_service
         .find_tags_by_article_id(article_id)
         .await
-        .or(Err(ApiResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            None,
-            None,
-        )))?;
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to find tags by article id")
+        })?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,

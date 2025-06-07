@@ -1,6 +1,9 @@
-use crate::model::{
-    api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
-    validated_json::ValidatedJson, validated_query_param::ValidatedQueryParam,
+use crate::{
+    model::{
+        api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
+        validated_json::ValidatedJson, validated_query_param::ValidatedQueryParam,
+    },
+    utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
     extract::{Extension, Path},
@@ -26,12 +29,16 @@ use serde::Deserialize;
 use std::sync::Arc;
 use validator::Validate;
 
+#[tracing::instrument(
+    name = "create_article",
+    skip(article_app_service, token_app_service, token)
+)]
 pub async fn create_article<T, U>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewArticle>,
-) -> Result<impl IntoResponse, ApiResponse<()>>
+) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IArticleRepository,
     U: ITokenRepository,
@@ -40,14 +47,17 @@ where
         .verify_access_token(token)
         .await
         .map_err(|e| {
-            tracing::info!("failed to verify access token: {:?}", e);
-            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to verify access token")
         })?;
 
     let article = article_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to create article")
+        })?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -56,17 +66,21 @@ where
     ))
 }
 
+#[tracing::instrument(name = "find_article", skip(article_app_service))]
 pub async fn find_article<T>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Path(article_id): Path<i32>,
-) -> Result<impl IntoResponse, ApiResponse<()>>
+) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IArticleRepository,
 {
     let article = article_app_service
         .find(article_id, ArticleFilter::default())
         .await
-        .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Article not found")
+        })?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -85,11 +99,11 @@ pub struct AllArticlesQueryParam {
     pub pagination: Pagination,
 }
 
+#[tracing::instrument(name = "all_articles", skip(article_app_service))]
 pub async fn all_articles<T>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
-    // QsQuery(query_param): QsQuery<AllArticlesQueryParam>,
     ValidatedQueryParam(query_param): ValidatedQueryParam<AllArticlesQueryParam>,
-) -> Result<impl IntoResponse, ApiResponse<()>>
+) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IArticleRepository,
 {
@@ -99,11 +113,10 @@ where
     let articles = article_app_service
         .all(article_filter, pagination)
         .await
-        .or(Err(ApiResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            None,
-            None,
-        )))?;
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to get all articles")
+        })?;
 
     let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor);
@@ -115,13 +128,17 @@ where
     ))
 }
 
+#[tracing::instrument(
+    name = "update_article",
+    skip(article_app_service, token_app_service, token)
+)]
 pub async fn update_article<T, U>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     Path(article_id): Path<i32>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<UpdateArticle>,
-) -> Result<impl IntoResponse, ApiResponse<()>>
+) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IArticleRepository,
     U: ITokenRepository,
@@ -130,25 +147,17 @@ where
         .verify_access_token(token)
         .await
         .map_err(|e| {
-            tracing::info!("failed to verify access token: {:?}", e);
-            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to verify access token")
         })?;
-
-    let pre_article = article_app_service
-        .find(article_id, ArticleFilter::default())
-        .await
-        .or(Err(ApiResponse::new(StatusCode::NOT_FOUND, None, None)))?;
-
-    if (payload.title.is_none() && pre_article.title.is_none())
-        || (payload.body.is_none() && pre_article.body.is_none())
-    {
-        return Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None));
-    }
 
     let article = article_app_service
         .update(article_id, payload)
         .await
-        .or(Err(ApiResponse::new(StatusCode::BAD_REQUEST, None, None)))?;
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to update article")
+        })?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -157,12 +166,16 @@ where
     ))
 }
 
+#[tracing::instrument(
+    name = "delete_article",
+    skip(article_app_service, token_app_service, token)
+)]
 pub async fn delete_article<T, U>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(article_id): Path<i32>,
-) -> Result<impl IntoResponse, ApiResponse<()>>
+) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IArticleRepository,
     U: ITokenRepository,
@@ -171,19 +184,18 @@ where
         .verify_access_token(token)
         .await
         .map_err(|e| {
-            tracing::info!("failed to verify access token: {:?}", e);
-            ApiResponse::new(StatusCode::UNAUTHORIZED, None, None)
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to delete article")
         })?;
 
     article_app_service
         .delete(article_id)
         .await
         .map(|_| ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
-        .unwrap_or(ApiResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            None,
-            None,
-        ));
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to delete article")
+        })?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
@@ -198,10 +210,17 @@ pub struct FindArticlesByTagQueryParam {
     pub pagination: Pagination,
 }
 
+impl std::fmt::Display for FindArticlesByTagQueryParam {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[tracing::instrument(name = "find_articles_by_tag", skip(articles_by_tag_query_service))]
 pub async fn find_articles_by_tag<T>(
     Extension(articles_by_tag_query_service): Extension<Arc<T>>,
     ValidatedQueryParam(query_param): ValidatedQueryParam<FindArticlesByTagQueryParam>,
-) -> Result<impl IntoResponse, ApiResponse<()>>
+) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IArticlesByTagQueryService,
 {
@@ -211,11 +230,10 @@ where
     let articles = articles_by_tag_query_service
         .find_article_title_by_tag(filter, pagination)
         .await
-        .or(Err(ApiResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            None,
-            None,
-        )))?;
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to find articles by tag")
+        })?;
 
     let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor);

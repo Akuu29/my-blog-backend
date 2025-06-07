@@ -6,4 +6,3 @@ pub mod images;
 pub mod query_service;
 pub mod tags;
 pub mod users;
-pub mod utils;

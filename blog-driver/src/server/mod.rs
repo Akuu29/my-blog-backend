@@ -45,7 +45,7 @@ pub async fn run() {
     dotenv::dotenv().ok();
 
     let database_url = std::env::var("DATABASE_URL").expect("undefined DATABASE_URL");
-    tracing::debug!("start connecting to database");
+    tracing::info!("start connecting to database");
     let pool = PgPool::connect(&database_url).await.expect(&format!(
         "failed to connect to database, url is {}",
         database_url
@@ -102,7 +102,7 @@ pub async fn run() {
         .await
         .expect("failed to bind");
 
-    tracing::debug!("listening on {}", &domain);
+    tracing::info!("listening on {}", &domain);
 
     axum::serve(lister, app_router.router).await.unwrap();
 }

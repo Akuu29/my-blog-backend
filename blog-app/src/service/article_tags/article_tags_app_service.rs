@@ -19,17 +19,15 @@ impl<T: IArticleTagsRepository> ArticleTagsAppService<T> {
         let tx = self.repository.tx_begin().await?;
 
         let delete_article_tags_result = self.repository.delete(payload.article_id).await;
-        if delete_article_tags_result.is_err() {
+        if let Err(e) = delete_article_tags_result {
             tx.rollback().await?;
-            return Err(anyhow::anyhow!(delete_article_tags_result.err().unwrap()));
+            return Err(anyhow::anyhow!(e));
         }
 
         let bulk_insert_article_tags_result = self.repository.bulk_insert(payload).await;
-        if bulk_insert_article_tags_result.is_err() {
+        if let Err(e) = bulk_insert_article_tags_result {
             tx.rollback().await?;
-            return Err(anyhow::anyhow!(bulk_insert_article_tags_result
-                .err()
-                .unwrap()));
+            return Err(anyhow::anyhow!(e));
         }
 
         tx.commit().await?;

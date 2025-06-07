@@ -5,7 +5,7 @@ use blog_domain::model::{
     },
     users::user::User,
 };
-use jsonwebtoken::{errors, Algorithm, DecodingKey, EncodingKey, TokenData, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, TokenData, Validation};
 
 #[derive(Default)]
 pub struct TokenService {}
@@ -59,13 +59,9 @@ impl TokenService {
         };
 
         let token_data =
-            jsonwebtoken::decode::<AccessTokenClaims>(token.str(), &decoding_key, &validation)
-                .map_err(|e| match e.into_kind() {
-                    errors::ErrorKind::ExpiredSignature => anyhow::anyhow!("expired signature"),
-                    _ => anyhow::anyhow!("Unknown error"),
-                });
+            jsonwebtoken::decode::<AccessTokenClaims>(token.str(), &decoding_key, &validation)?;
 
-        token_data
+        Ok(token_data)
     }
 
     pub fn verify_refresh_token(
@@ -85,12 +81,8 @@ impl TokenService {
         };
 
         let token_data =
-            jsonwebtoken::decode::<RefreshTokenClaims>(token.str(), &decoding_key, &validation)
-                .map_err(|e| match e.into_kind() {
-                    errors::ErrorKind::ExpiredSignature => anyhow::anyhow!("expired signature"),
-                    _ => anyhow::anyhow!("Unknown error"),
-                });
+            jsonwebtoken::decode::<RefreshTokenClaims>(token.str(), &decoding_key, &validation)?;
 
-        token_data
+        Ok(token_data)
     }
 }

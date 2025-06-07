@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use sqlx::types::Uuid;
 
-#[derive(Default, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TagFilter {
     pub user_id: Option<Uuid>,

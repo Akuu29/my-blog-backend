@@ -1,3 +1,4 @@
+use crate::utils::usecase_error::UsecaseError;
 use blog_domain::model::{
     articles::{
         article::{Article, NewArticle, UpdateArticle},
@@ -37,6 +38,19 @@ impl<T: IArticleRepository> ArticleAppService<T> {
     }
 
     pub async fn update(&self, article_id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
+        let pre_article = self
+            .repository
+            .find(article_id, ArticleFilter::default())
+            .await?;
+
+        if (payload.title.is_none() && pre_article.title.is_none())
+            || (payload.body.is_none() && pre_article.body.is_none())
+        {
+            return Err(anyhow::anyhow!(UsecaseError::ValidationFailed(
+                "title or body is required".to_string()
+            )));
+        }
+
         self.repository.update(article_id, payload).await
     }
 

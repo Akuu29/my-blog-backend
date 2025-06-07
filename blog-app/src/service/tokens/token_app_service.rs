@@ -7,7 +7,7 @@ use blog_domain::model::{
     },
     users::user::User,
 };
-use jsonwebtoken::{errors, Algorithm, DecodingKey, TokenData, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, TokenData, Validation};
 
 pub struct TokenAppService<T: ITokenRepository> {
     repository: T,
@@ -45,12 +45,7 @@ impl<T: ITokenRepository> TokenAppService<T> {
         };
 
         let token_data =
-            jsonwebtoken::decode::<IdTokenClaims>(token.str(), &decoding_key, &validation)
-                .map_err(|e| match e.into_kind() {
-                    errors::ErrorKind::ExpiredSignature => anyhow::anyhow!("expired signature"),
-                    _ => anyhow::anyhow!("Unknown error"),
-                })
-                .unwrap();
+            jsonwebtoken::decode::<IdTokenClaims>(token.str(), &decoding_key, &validation)?;
 
         Ok(token_data)
     }

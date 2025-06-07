@@ -1,4 +1,4 @@
-use crate::db::utils::RepositoryError;
+use crate::utils::repository_error::RepositoryError;
 use anyhow::Ok;
 use async_trait::async_trait;
 use blog_domain::model::categories::{
