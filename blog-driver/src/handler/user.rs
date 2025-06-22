@@ -26,12 +26,16 @@ use sqlx::types::Uuid;
 use std::sync::Arc;
 
 #[tracing::instrument(name = "create_user", skip(user_app_service, token_app_service, token))]
-pub async fn create<T: IUserRepository, U: ITokenRepository>(
+pub async fn create<T, U>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewUser>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: IUserRepository,
+    U: ITokenRepository,
+{
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
@@ -68,10 +72,13 @@ pub async fn create<T: IUserRepository, U: ITokenRepository>(
 }
 
 #[tracing::instrument(name = "find_user", skip(user_app_service))]
-pub async fn find<T: IUserRepository>(
+pub async fn find<T>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Path(user_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: IUserRepository,
+{
     let user = user_app_service.find(user_id).await.map_err(|e| {
         let app_err = AppError::from(e);
         app_err.handle_error("Failed to find user")
@@ -85,11 +92,14 @@ pub async fn find<T: IUserRepository>(
 }
 
 #[tracing::instrument(name = "update_user", skip(user_app_service))]
-pub async fn update<T: IUserRepository>(
+pub async fn update<T>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Path(user_id): Path<Uuid>,
     ValidatedJson(payload): ValidatedJson<UpdateUser>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: IUserRepository,
+{
     let user = user_app_service
         .update(user_id, payload)
         .await
@@ -106,10 +116,13 @@ pub async fn update<T: IUserRepository>(
 }
 
 #[tracing::instrument(name = "delete_user", skip(user_app_service))]
-pub async fn delete<T: IUserRepository>(
+pub async fn delete<T>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Path(user_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: IUserRepository,
+{
     user_app_service.delete(user_id).await.map_err(|e| {
         let app_err = AppError::from(e);
         app_err.handle_error("Failed to delete user")

@@ -1,5 +1,8 @@
-use crate::handler::{article, article_tags, category, comment, image, tag, token, user};
-use crate::server::app_state::AppState;
+use crate::{
+    handler::{article, article_tags, category, comment, image, tag, token, user},
+    server::app_state::AppState,
+    service::cookie_service::CookieService,
+};
 use axum::extract::DefaultBodyLimit;
 use axum::{
     routing::{delete, get, patch, post},
@@ -52,6 +55,7 @@ impl AppRouter {
         tags_attached_article_query_service: C,
         image_app_service: ImageAppService<D>,
         article_image_query_service: E,
+        cookie_service: CookieService,
     ) -> Self
     where
         T: ITokenRepository,
@@ -67,7 +71,7 @@ impl AppRouter {
         D: IImageRepository,
         E: IArticleImageQueryService,
     {
-        let token_router = Self::create_token_router::<T, U>();
+        let token_router = Self::create_token_router::<T, U>(cookie_service);
         let users_router = Self::create_users_router::<T, U>();
         let articles_router = Self::create_articles_router::<T, V, B>(article_by_tag_query_service);
         let comments_router = Self::create_comments_router::<W>(comment_app_service);
@@ -107,7 +111,7 @@ impl AppRouter {
         Self { router }
     }
 
-    fn create_token_router<T, U>() -> Router<AppState>
+    fn create_token_router<T, U>(cookie_service: CookieService) -> Router<AppState>
     where
         T: ITokenRepository,
         U: IUserRepository,
@@ -116,6 +120,7 @@ impl AppRouter {
             .route("/verify", get(token::verify_id_token::<T, U>))
             .route("/refresh", get(token::refresh_access_token::<T, U>))
             .route("/reset", get(token::reset_refresh_token))
+            .layer(Extension(Arc::new(cookie_service)))
     }
 
     fn create_users_router<T, U>() -> Router<AppState>

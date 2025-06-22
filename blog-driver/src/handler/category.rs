@@ -27,12 +27,16 @@ use std::sync::Arc;
     name = "create_category",
     skip(category_app_service, token_app_service, token)
 )]
-pub async fn create_category<T: ICategoryRepository, U: ITokenRepository>(
+pub async fn create_category<T, U>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewCategory>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: ICategoryRepository,
+    U: ITokenRepository,
+{
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
@@ -57,10 +61,13 @@ pub async fn create_category<T: ICategoryRepository, U: ITokenRepository>(
 }
 
 #[tracing::instrument(name = "get_all_categories", skip(category_app_service))]
-pub async fn all_categories<T: ICategoryRepository>(
+pub async fn all_categories<T>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Query(category_filter): Query<CategoryFilter>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: ICategoryRepository,
+{
     let categories = category_app_service
         .all(category_filter)
         .await
@@ -80,13 +87,17 @@ pub async fn all_categories<T: ICategoryRepository>(
     name = "update_category",
     skip(category_app_service, token_app_service, token)
 )]
-pub async fn update_category<T: ICategoryRepository, U: ITokenRepository>(
+pub async fn update_category<T, U>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(category_id): Path<i32>,
     ValidatedJson(payload): ValidatedJson<UpdateCategory>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: ICategoryRepository,
+    U: ITokenRepository,
+{
     let _access_token_data = token_app_service
         .verify_access_token(token)
         .await
@@ -114,12 +125,16 @@ pub async fn update_category<T: ICategoryRepository, U: ITokenRepository>(
     name = "delete_category",
     skip(category_app_service, token_app_service, token)
 )]
-pub async fn delete_category<T: ICategoryRepository, U: ITokenRepository>(
+pub async fn delete_category<T, U>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(category_id): Path<i32>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: ICategoryRepository,
+    U: ITokenRepository,
+{
     let _access_token_data = token_app_service
         .verify_access_token(token)
         .await
@@ -143,10 +158,13 @@ pub async fn delete_category<T: ICategoryRepository, U: ITokenRepository>(
     name = "find_articles_by_category",
     skip(articles_by_category_query_service)
 )]
-pub async fn find_articles_by_category<T: IArticlesByCategoryQueryService>(
+pub async fn find_articles_by_category<T>(
     Extension(articles_by_category_query_service): Extension<Arc<T>>,
     Path(category_name): Path<String>,
-) -> Result<impl IntoResponse, ApiResponse<String>> {
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: IArticlesByCategoryQueryService,
+{
     let articles_by_category = articles_by_category_query_service
         .find_article_title_by_category(category_name)
         .await

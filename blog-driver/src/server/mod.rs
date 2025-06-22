@@ -1,3 +1,4 @@
+use crate::service::cookie_service::CookieService;
 use axum::http::Method;
 use axum_extra::extract::cookie::Key;
 use blog_adapter::{
@@ -70,10 +71,18 @@ pub async fn run() {
     let tags_attached_article_query_service = TagsAttachedArticleQueryService::new(pool.clone());
     let article_image_query_service = ArticleImageQueryService::new(pool.clone());
 
-    let client_addr = std::env::var("CLIENT_ADDR").expect("undefined CLIENT_ADDR");
+    // cookie service (It is a driver layer service)
+    let cookie_service = CookieService::new();
+
+    let client_addrs_str = std::env::var("CLIENT_ADDRS").expect("undefined CLIENT_ADDRS");
+    let client_addrs = client_addrs_str.split(",").collect::<Vec<&str>>();
+    let client_addrs = client_addrs
+        .iter()
+        .map(|addr| addr.parse::<HeaderValue>().unwrap())
+        .collect::<Vec<HeaderValue>>();
     let cors_layer = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
-        .allow_origin(client_addr.parse::<HeaderValue>().unwrap())
+        .allow_origin(client_addrs)
         .allow_credentials(true)
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE, COOKIE]);
 
@@ -96,6 +105,7 @@ pub async fn run() {
         tags_attached_article_query_service,
         image_app_service,
         article_image_query_service,
+        cookie_service,
     );
     let domain = std::env::var("INTERNAL_API_DOMAIN").expect("undefined INTERNAL_API_DOMAIN");
     let lister = tokio::net::TcpListener::bind(&domain)
