@@ -28,8 +28,8 @@ use blog_app::service::{
     users::user_app_service::UserAppService,
 };
 use http::{
-    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE},
     HeaderValue,
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE},
 };
 use sqlx::PgPool;
 use tower_http::cors::CorsLayer;
@@ -40,8 +40,6 @@ mod app_state;
 use app_state::AppState;
 
 pub async fn run() {
-    let log_level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
-    std::env::set_var("RUST_LOG", log_level);
     tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
 

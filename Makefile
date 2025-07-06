@@ -1,7 +1,6 @@
 .PHONY: dev run-local-container login-ghcr build-% push-% deploy-%
 
 dev:
-	RUST_LOG=debug \
 	MASTER_KEY='${shell openssl rand -base64 64}' \
 	cargo watch -x run
 

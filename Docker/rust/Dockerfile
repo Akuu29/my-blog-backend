@@ -1,5 +1,5 @@
 # builder
-FROM rust:1.83 AS builder
+FROM rust:1.88.0 AS builder
 
 WORKDIR /usr/src/app
 

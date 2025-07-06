@@ -7,7 +7,7 @@ use blog_domain::model::{
     },
     common::pagination::Pagination,
 };
-use sqlx::{types::Uuid, QueryBuilder};
+use sqlx::{QueryBuilder, types::Uuid};
 
 #[derive(Debug, Clone)]
 pub struct ArticleRepository {
