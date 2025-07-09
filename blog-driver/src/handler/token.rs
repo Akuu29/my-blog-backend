@@ -82,8 +82,8 @@ where
             ))
         }
         Err(e) => {
-            match e.downcast_ref::<AppError>() {
-                Some(AppError::RepositoryError(RepositoryError::NotFound)) => {
+            match e.downcast_ref::<RepositoryError>() {
+                Some(RepositoryError::NotFound) => {
                     let new_user =
                         NewUser::default().new(&id_token_claims.email(), &id_token_claims.sub());
                     let user = user_app_service.create(new_user).await.map_err(|e| {
