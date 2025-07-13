@@ -4,10 +4,7 @@ use crate::{
 };
 
 pub trait ErrorHandler {
-    fn handle_error(
-        &self,
-        err_message_str: &str,
-    ) -> crate::model::api_response::ApiResponse<String>;
+    fn handle_error(&self, err_message_str: &str) -> ApiResponse<String>;
 
     fn log_error(&self);
 }

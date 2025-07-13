@@ -64,15 +64,6 @@ where
                     app_err.handle_error("Failed to generate refresh token")
                 })?;
             let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
-            // let cookie = Cookie::build(("refresh_token", url_encoded_refresh_token))
-            //     .http_only(true)
-            //     .max_age(Duration::days(30))
-            //     .path("/")
-            //     //     .same_site(SameSite::None)
-            //     //     .secure(true);
-            //     .same_site(SameSite::Lax)
-            //     .secure(false);
-            // let updated_jar = jar.add(cookie);
             let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
 
             Ok(ApiResponse::new(
@@ -81,59 +72,45 @@ where
                 Some(updated_jar),
             ))
         }
-        Err(e) => {
-            match e.downcast_ref::<RepositoryError>() {
-                Some(RepositoryError::NotFound) => {
-                    let new_user =
-                        NewUser::default().new(&id_token_claims.email(), &id_token_claims.sub());
-                    let user = user_app_service.create(new_user).await.map_err(|e| {
+        Err(e) => match e.downcast_ref::<RepositoryError>() {
+            Some(RepositoryError::NotFound) => {
+                let new_user =
+                    NewUser::default().new(&id_token_claims.email(), &id_token_claims.sub());
+                let user = user_app_service.create(new_user).await.map_err(|e| {
+                    let app_err = AppError::from(e);
+                    app_err.handle_error("Failed to create user")
+                })?;
+
+                let access_token = token_app_service
+                    .generate_access_token(&user)
+                    .map_err(|e| {
                         let app_err = AppError::from(e);
-                        app_err.handle_error("Failed to create user")
+                        app_err.handle_error("Failed to generate access token")
                     })?;
 
-                    let access_token =
-                        token_app_service
-                            .generate_access_token(&user)
-                            .map_err(|e| {
-                                let app_err = AppError::from(e);
-                                app_err.handle_error("Failed to generate access token")
-                            })?;
+                let api_credentials = ApiCredentials::new(&access_token);
 
-                    let api_credentials = ApiCredentials::new(&access_token);
+                let refresh_token =
+                    token_app_service
+                        .generate_refresh_token(&user)
+                        .map_err(|e| {
+                            let app_err = AppError::from(e);
+                            app_err.handle_error("Failed to generate refresh token")
+                        })?;
+                let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
+                let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
 
-                    let refresh_token =
-                        token_app_service
-                            .generate_refresh_token(&user)
-                            .map_err(|e| {
-                                let app_err = AppError::from(e);
-                                app_err.handle_error("Failed to generate refresh token")
-                            })?;
-                    let url_encoded_refresh_token =
-                        urlencoding::encode(&refresh_token).into_owned();
-                    // let cookie = Cookie::build(("refresh_token", url_encoded_refresh_token))
-                    //     .http_only(true)
-                    //     .max_age(Duration::days(30))
-                    //     .path("/")
-                    //     // .same_site(SameSite::None)
-                    //     // .secure(true);
-                    //     .same_site(SameSite::Lax)
-                    //     .secure(false);
-                    // let updated_jar = jar.add(cookie);
-                    let updated_jar =
-                        cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
-
-                    Ok(ApiResponse::new(
-                        StatusCode::OK,
-                        Some(serde_json::to_string(&api_credentials).unwrap()),
-                        Some(updated_jar),
-                    ))
-                }
-                _ => {
-                    let app_err = AppError::from(e);
-                    Err(app_err.handle_error("Failed verify id token"))
-                }
+                Ok(ApiResponse::new(
+                    StatusCode::OK,
+                    Some(serde_json::to_string(&api_credentials).unwrap()),
+                    Some(updated_jar),
+                ))
             }
-        }
+            _ => {
+                let app_err = AppError::from(e);
+                Err(app_err.handle_error("Failed to verify id token"))
+            }
+        },
     }
 }
 
@@ -156,17 +133,6 @@ where
         app_err.handle_error("Failed to get refresh token")
     })?;
     let refresh_token = RefreshTokenString(refresh_token);
-
-    //         let err_msg_msg = "Failed to get refresh token".to_string();
-    //         let err_msg = ErrorMessage::new(ErrorMessageKind::BadRequest, err_msg_msg.clone());
-    //         tracing::error!(error.kind=%ErrorLogKind::Authentication, error.message=%err_msg_msg);
-    //         return Err(ApiResponse::new(
-    //             StatusCode::BAD_REQUEST,
-    //             Some(serde_json::to_string(&err_msg).unwrap()),
-    //             None,
-    //         ));
-    //     }
-    // };
 
     let token_data = token_app_service
         .verify_refresh_token(refresh_token)
@@ -204,16 +170,6 @@ pub async fn reset_refresh_token(
     Extension(cookie_service): Extension<Arc<CookieService>>,
     jar: PrivateCookieJar,
 ) -> Result<impl IntoResponse, ApiResponse<()>> {
-    // let cookie = Cookie::build(("refresh_token", ""))
-    //     .http_only(true)
-    //     .max_age(Duration::days(30))
-    //     .path("/")
-    //     // .same_site(SameSite::None)
-    //     // .secure(true);
-    //     .same_site(SameSite::Lax)
-    //     .secure(false);
-
-    // let updated_jar = jar.remove(cookie);
     let updated_jar = cookie_service.clear_refresh_token(jar);
 
     Ok(ApiResponse::<()>::new(

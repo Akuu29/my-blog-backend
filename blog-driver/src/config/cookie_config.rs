@@ -32,7 +32,6 @@ impl SameSiteConfig {
 }
 
 impl CookieConfig {
-    /// 環境変数から設定を読み込む
     pub fn from_env() -> Self {
         let environment = env::var("ENVIRONMENT").expect("Undefined ENVIRONMENT");
 

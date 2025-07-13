@@ -3,11 +3,12 @@ use crate::{
         api_response::ApiResponse,
         auth_token::AuthToken,
         error_message::{ErrorMessage, ErrorMessageKind},
+        validated_image::ValidatedImage,
     },
     utils::{app_error::AppError, error_handler::ErrorHandler, error_log_kind::ErrorLogKind},
 };
 use axum::{
-    extract::{Extension, Multipart, Path, Query},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -18,24 +19,20 @@ use blog_app::{
     },
 };
 use blog_domain::model::{
-    images::{
-        i_image_repository::{IImageRepository, ImageFilter},
-        image::{NewImage, StorageType},
-    },
+    images::i_image_repository::{IImageRepository, ImageFilter},
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
 use std::sync::Arc;
-use validator::Validate;
 
 #[tracing::instrument(
     name = "create_image",
-    skip(image_app_service, token_app_service, token, multipart)
+    skip(image_app_service, token_app_service, token)
 )]
 pub async fn create<T, U>(
     Extension(image_app_service): Extension<Arc<ImageAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
-    mut multipart: Multipart,
+    ValidatedImage(new_image): ValidatedImage,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IImageRepository,
@@ -48,87 +45,6 @@ where
             let app_err = AppError::from(e);
             app_err.handle_error("Failed to verify access token")
         });
-
-    // TODO: Move the following to FromRequest
-    let mut file_data = Vec::default();
-    let mut filename = None;
-    let mut article_id = None;
-
-    while let Some(field) = multipart.next_field().await.unwrap() {
-        let name = field.name().unwrap().to_string();
-
-        match name.as_str() {
-            "file" => {
-                let data = field.bytes().await.unwrap_or_default();
-                file_data = data.to_vec();
-            }
-            "filename" => {
-                filename = Some(field.text().await.unwrap_or_default());
-            }
-            "article_id" => {
-                article_id = Some(field.text().await.unwrap_or_default());
-            }
-            _ => {}
-        }
-    }
-
-    let kind =
-        infer::get(&file_data).ok_or(ApiResponse::new(StatusCode::BAD_REQUEST, None, None))?;
-
-    let new_image = NewImage {
-        name: filename.unwrap(),
-        mime_type: kind.mime_type().to_string(),
-        data: file_data,
-        url: None,
-        storage_type: StorageType::Database,
-        article_id: article_id.unwrap().parse::<i32>().unwrap(),
-    };
-
-    new_image.validate().map_err(|e| {
-        let err_log_msg = e.to_string();
-        tracing::error!(error.message=%err_log_msg);
-
-        let err_msg = ErrorMessage::new(
-            ErrorMessageKind::Validation,
-            "Failed to validate image".to_string(),
-        );
-
-        let field_errors = e.field_errors();
-        for field in field_errors.iter() {
-            for error in field.1.iter() {
-                match error.code.as_ref() {
-                    "INVALID_MIME_TYPE" => {
-                        return ApiResponse::new(
-                            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
-                        )
-                    }
-                    "INVALID_DATA_LENGTH" => {
-                        return ApiResponse::new(
-                            StatusCode::PAYLOAD_TOO_LARGE,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
-                        )
-                    }
-                    "INVALID_IMAGE_DIMENSION" => {
-                        return ApiResponse::new(
-                            StatusCode::UNPROCESSABLE_ENTITY,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
-                        )
-                    }
-                    _ => return ApiResponse::new(StatusCode::BAD_REQUEST, None, None),
-                }
-            }
-        }
-
-        ApiResponse::new(
-            StatusCode::BAD_REQUEST,
-            Some(serde_json::to_string(&err_msg).unwrap()),
-            None,
-        )
-    })?;
 
     let image = image_app_service.create(new_image).await.map_err(|e| {
         let app_err = AppError::from(e);
