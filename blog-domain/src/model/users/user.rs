@@ -1,12 +1,12 @@
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use crate::model::users::{email_cipher::EmailCipher, email_hash::EmailHash};
+use rand::{Rng, distributions::Alphanumeric, thread_rng};
 use serde::{Deserialize, Serialize};
 use sqlx::{
-    postgres::PgRow,
+    FromRow,
     types::{
-        chrono::{DateTime, Local},
         Uuid,
+        chrono::{DateTime, Local},
     },
-    Error, FromRow, Row,
 };
 use validator::Validate;
 
@@ -18,59 +18,52 @@ pub enum UserRole {
     User,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, FromRow, Serialize)]
 pub struct User {
-    pub id: Uuid,
+    pub public_id: Uuid,
     pub name: String,
-    pub email: String,
     pub role: UserRole,
-    idp_sub: String,
+    pub is_active: bool,
+    pub last_login_at: Option<DateTime<Local>>,
     created_at: DateTime<Local>,
     updated_at: DateTime<Local>,
 }
 
-impl<'r> FromRow<'r, PgRow> for User {
-    fn from_row(row: &'r PgRow) -> Result<Self, Error> {
-        let id: Uuid = row.try_get("id")?;
-        let name: String = row.try_get("name")?;
-        let email: String = row.try_get("email")?;
-        let role: UserRole = row.try_get("role")?;
-        let idp_sub: String = row.try_get("idp_sub")?;
-        let created_at: DateTime<Local> = row.try_get("created_at")?;
-        let updated_at: DateTime<Local> = row.try_get("updated_at")?;
-
-        Ok(User {
-            id,
-            name,
-            email,
-            role,
-            idp_sub,
-            created_at,
-            updated_at,
-        })
-    }
+#[derive(Debug, FromRow, Serialize)]
+pub struct UserIdentity {
+    pub provider_name: String,
+    pub provider_user_id: String,
+    pub provider_email_cipher: EmailCipher,
+    pub provider_email_hash: EmailHash,
+    pub provider_email_verified: bool,
+    pub is_primary: bool,
 }
 
-#[derive(Debug, Default, Deserialize, Validate)]
+#[derive(Debug)]
 pub struct NewUser {
-    #[validate(length(min = 1, max = 255, message = "name length must be 1 to 255"))]
     pub name: String,
-    #[validate(email)]
-    pub email: String,
-    #[validate(length(min = 1, max = 255, message = "sub length must be 1 to 255"))]
-    pub idp_sub: String,
+    pub role: UserRole,
+    pub identity: UserIdentity,
 }
 
 impl NewUser {
-    pub fn new(&self, email: &str, idp_sub: &str) -> Self {
+    pub fn new(provider_name: &str, user_id: &str, email: &str, email_verified: bool) -> Self {
+        let email_cipher = EmailCipher::from_plaintext(email);
         Self {
-            name: self.init_user_name(10),
-            email: email.to_string(),
-            idp_sub: idp_sub.to_string(),
+            name: Self::init_user_name(10),
+            role: UserRole::default(),
+            identity: UserIdentity {
+                provider_name: provider_name.to_string(),
+                provider_user_id: user_id.to_string(),
+                provider_email_cipher: email_cipher,
+                provider_email_hash: EmailHash::from_plaintext(email),
+                provider_email_verified: email_verified,
+                is_primary: true,
+            },
         }
     }
 
-    fn init_user_name(&self, len: usize) -> String {
+    fn init_user_name(len: usize) -> String {
         let mut rng = thread_rng();
         let name: String = std::iter::repeat(())
             .map(|()| rng.sample(Alphanumeric))
@@ -84,8 +77,6 @@ impl NewUser {
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUser {
-    #[validate(length(min = 1, max = 255, message = "name length must be 1 to 255"))]
+    #[validate(length(min = 1, max = 15, message = "name length must be 1 to 15"))]
     pub name: Option<String>,
-    #[validate(email)]
-    pub email: Option<String>,
 }

@@ -2,6 +2,7 @@ use crate::model::users::user::{User, UserRole};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use url::Url;
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
@@ -14,6 +15,7 @@ pub struct IdTokenClaims {
     auth_time: usize,
     user_id: String,
     email: String,
+    email_verified: bool,
 }
 
 impl IdTokenClaims {
@@ -23,9 +25,18 @@ impl IdTokenClaims {
     pub fn email(&self) -> String {
         self.email.clone()
     }
+    pub fn email_verified(&self) -> bool {
+        self.email_verified
+    }
+    pub fn provider_name(&self) -> anyhow::Result<String> {
+        match Url::parse(&self.iss)?.host_str().unwrap_or("") {
+            "securetoken.google.com" => Ok("firebase".to_string()),
+            _ => Err(anyhow::anyhow!("Invalid provider")),
+        }
+    }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct AccessTokenClaims {
     exp: usize,
     iat: usize,
@@ -50,7 +61,7 @@ impl AccessTokenClaims {
             iat: now.timestamp() as usize,
             aud: std::env::var("AUDIENCE").expect("undefined AUDIENCE"),
             iss: std::env::var("ISSUER").expect("undefined ISSUER"),
-            sub: user.id,
+            sub: user.public_id,
             nbf: not_before.timestamp() as usize,
             jti: uuid::Uuid::new_v4().to_string(),
             role: user.role.clone(),
@@ -81,7 +92,7 @@ impl RefreshTokenClaims {
             iat: now.timestamp() as usize,
             aud: std::env::var("AUDIENCE").expect("undefined AUDIENCE"),
             iss: std::env::var("ISSUER").expect("undefined ISSUER"),
-            sub: user.id,
+            sub: user.public_id,
         }
     }
 
