@@ -112,7 +112,7 @@ where
 
     let min_duration = time::Duration::from_millis(1000);
     let elapsed = start_time.elapsed();
-    if elapsed > min_duration {
+    if elapsed < min_duration {
         tokio::time::sleep(min_duration - elapsed).await;
     }
 
@@ -188,7 +188,7 @@ where
 
     let min_duration = time::Duration::from_millis(1000);
     let elapsed = start_time.elapsed();
-    if elapsed > min_duration {
+    if elapsed < min_duration {
         tokio::time::sleep(min_duration - elapsed).await;
     }
 
