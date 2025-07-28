@@ -29,9 +29,11 @@ impl IdTokenClaims {
         self.email_verified
     }
     pub fn provider_name(&self) -> anyhow::Result<String> {
-        match Url::parse(&self.iss)?.host_str().unwrap_or("") {
-            "securetoken.google.com" => Ok("firebase".to_string()),
-            _ => Err(anyhow::anyhow!("Invalid provider")),
+        let url = Url::parse(&self.iss)?;
+        match url.host_str() {
+            Some("securetoken.google.com") => Ok("firebase".to_string()),
+            Some(host) => Err(anyhow::anyhow!("Unsupported provider: {}", host)),
+            None => Err(anyhow::anyhow!("Invalid issuer URL: no host found")),
         }
     }
 }
