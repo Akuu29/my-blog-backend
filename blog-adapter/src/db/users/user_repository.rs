@@ -76,8 +76,16 @@ impl IUserRepository for UserRepository {
     async fn find(&self, user_id: Uuid) -> anyhow::Result<User> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT * FROM users
-            WHERE id = $1;
+            SELECT
+                public_id,
+                name,
+                role,
+                is_active,
+                last_login_at,
+                created_at,
+                updated_at
+            FROM users
+            WHERE public_id = $1;
             "#,
         )
         .bind(user_id)

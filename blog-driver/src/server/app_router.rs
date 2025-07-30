@@ -128,8 +128,8 @@ impl AppRouter {
         U: IUserRepository,
     {
         Router::new()
-            // .route("/sign-up", post(user::sign_up::<T, U>))
-            .route("/sign-in", post(user::sign_in::<T, U>))
+            .route("/signup", post(user::sign_up::<T, U>))
+            .route("/signin", post(user::sign_in::<T, U>))
             .route(
                 "/:user_id",
                 get(user::find::<U>)
