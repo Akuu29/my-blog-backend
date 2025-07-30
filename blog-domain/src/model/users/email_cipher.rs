@@ -3,6 +3,7 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use sqlx::{FromRow, types::Json};
 use std::env;
 
@@ -48,25 +49,34 @@ impl EmailCipher {
         }
     }
 
-    fn encrypt_email(email: &str) -> (Vec<u8>, Vec<u8>) {
-        let encryption_key = env::var("ENCRYPTION_KEY").expect("Undefined ENCRYPTION_KEY");
-        let key = Key::<Aes256Gcm>::from_slice(encryption_key.as_bytes());
+    fn derive_key() -> Key<Aes256Gcm> {
+        let encryption_key =
+            env::var("EMAIL_ENCRYPTION_KEY").expect("Undefined EMAIL_ENCRYPTION_KEY");
 
+        let mut hasher = Sha256::default();
+        hasher.update(encryption_key.as_bytes());
+        let key_bytes = hasher.finalize();
+
+        *Key::<Aes256Gcm>::from_slice(&key_bytes)
+    }
+
+    fn encrypt_email(email: &str) -> (Vec<u8>, Vec<u8>) {
+        let key = Self::derive_key();
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
-        let cipher = Aes256Gcm::new(key);
+        let cipher = Aes256Gcm::new(&key);
         let ciphertext = cipher.encrypt(&nonce, email.as_bytes()).unwrap();
         (ciphertext, nonce.to_vec())
     }
 
-    pub fn decrypt_email(&self, ciphertext: &[u8], nonce: &[u8]) -> String {
-        let encryption_key = env::var("ENCRYPTION_KEY").expect("Undefined ENCRYPTION_KEY");
-        let key = Key::<Aes256Gcm>::from_slice(encryption_key.as_bytes());
-
+    pub fn decrypt_email(&self, ciphertext: &[u8], nonce: &[u8]) -> anyhow::Result<String> {
+        let key = Self::derive_key();
         let nonce = Nonce::from_slice(nonce);
 
-        let cipher = Aes256Gcm::new(key);
-        let plaintext = cipher.decrypt(nonce, ciphertext).unwrap();
-        String::from_utf8(plaintext).unwrap()
+        let cipher = Aes256Gcm::new(&key);
+        let plaintext = cipher
+            .decrypt(nonce, ciphertext)
+            .map_err(|e| anyhow::anyhow!("Failed to decrypt email: {}", e))?;
+        String::from_utf8(plaintext).map_err(|e| anyhow::anyhow!("Invalid UTF-8: {}", e))
     }
 }
