@@ -7,12 +7,9 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use blog_app::{
-    query_service::articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
-    service::{
-        categories::category_app_service::CategoryAppService,
-        tokens::token_app_service::TokenAppService,
-    },
+use blog_app::service::{
+    categories::category_app_service::CategoryAppService,
+    tokens::token_app_service::TokenAppService,
 };
 use blog_domain::model::{
     categories::{
@@ -22,6 +19,7 @@ use blog_domain::model::{
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[tracing::instrument(
     name = "create_category",
@@ -91,7 +89,7 @@ pub async fn update_category<T, U>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
-    Path(category_id): Path<i32>,
+    Path(category_id): Path<Uuid>,
     ValidatedJson(payload): ValidatedJson<UpdateCategory>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
@@ -129,7 +127,7 @@ pub async fn delete_category<T, U>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
-    Path(category_id): Path<i32>,
+    Path(category_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ICategoryRepository,
@@ -152,30 +150,4 @@ where
         })?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
-}
-
-#[tracing::instrument(
-    name = "find_articles_by_category",
-    skip(articles_by_category_query_service)
-)]
-pub async fn find_articles_by_category<T>(
-    Extension(articles_by_category_query_service): Extension<Arc<T>>,
-    Path(category_name): Path<String>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
-where
-    T: IArticlesByCategoryQueryService,
-{
-    let articles_by_category = articles_by_category_query_service
-        .find_article_title_by_category(category_name)
-        .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to find articles by category")
-        })?;
-
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&articles_by_category).unwrap()),
-        None,
-    ))
 }

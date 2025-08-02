@@ -12,6 +12,7 @@ use axum::{
     http::StatusCode,
 };
 use blog_domain::model::images::image::{NewImage, StorageType};
+use uuid::Uuid;
 use validator::Validate;
 
 #[derive(Debug)]
@@ -91,7 +92,7 @@ where
                         )
                     })?);
                 }
-                "article_id" => {
+                "articleId" => {
                     article_id = Some(field.text().await.map_err(|e| {
                         tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror=%e.to_string());
                         let err_msg = ErrorMessage::new(
@@ -118,7 +119,7 @@ where
             data: file_data,
             url: None,
             storage_type: StorageType::Database,
-            article_id: article_id.unwrap().parse::<i32>().unwrap(),
+            article_public_id: article_id.unwrap().parse::<Uuid>().unwrap(),
         };
 
         new_image.validate().map_err(|e| {

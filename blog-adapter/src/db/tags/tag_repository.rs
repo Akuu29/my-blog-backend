@@ -4,7 +4,8 @@ use blog_domain::model::tags::{
     i_tag_repository::{ITagRepository, TagFilter},
     tag::{NewTag, Tag},
 };
-use sqlx::{types::Uuid, QueryBuilder};
+use sqlx::QueryBuilder;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct TagRepository {
@@ -28,9 +29,14 @@ impl ITagRepository for TagRepository {
             )
             VALUES (
                 $1,
-                $2
+                (SELECT id FROM users WHERE public_id = $2)
             )
-            RETURNING *;
+            RETURNING
+                public_id,
+                name,
+                created_at,
+                updated_at
+            ;
             "#,
         )
         .bind(payload.name)
@@ -41,46 +47,51 @@ impl ITagRepository for TagRepository {
         Ok(tag)
     }
     async fn all(&self, tag_filter: TagFilter) -> anyhow::Result<Vec<Tag>> {
-        let mut query = QueryBuilder::new(
+        let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                id,
-                name,
-                created_at,
-                updated_at
-            FROM tags
+                t.public_id,
+                t.name,
+                t.created_at,
+                t.updated_at
+            FROM tags AS t
+            LEFT JOIN users AS u
+            ON t.user_id = u.id
             "#,
         );
 
-        let mut conditions = vec![];
+        let mut first = true;
+        let mut push_condition = |qb: &mut QueryBuilder<'_, sqlx::Postgres>| {
+            if first {
+                qb.push(" WHERE ");
+                first = false;
+            } else {
+                qb.push(" AND ");
+            }
+        };
 
-        if tag_filter.user_id.is_some() {
-            conditions.push("user_id = $1");
+        if let Some(user_id) = tag_filter.user_id {
+            push_condition(&mut qb);
+            qb.push("u.public_id = ").push_bind(user_id);
         }
 
-        if tag_filter.tag_ids.is_some() {
-            conditions.push("id = ANY($2)");
+        if let Some(tag_ids) = tag_filter.tag_ids {
+            push_condition(&mut qb);
+            qb.push("t.public_id = ANY(").push_bind(tag_ids).push(")");
         }
 
-        if !conditions.is_empty() {
-            query.push(" WHERE ").push(conditions.join(" AND "));
-        }
-
-        query.push(" ORDER BY id DESC; ");
-        let tags = query
-            .build_query_as::<Tag>()
-            .bind(tag_filter.user_id)
-            .bind(tag_filter.tag_ids)
-            .fetch_all(&self.pool)
-            .await?;
+        qb.push(" ORDER BY t.id DESC; ");
+        let tags = qb.build_query_as::<Tag>().fetch_all(&self.pool).await?;
 
         Ok(tags)
     }
-    async fn delete(&self, tag_id: i32) -> anyhow::Result<()> {
+
+    async fn delete(&self, tag_id: Uuid) -> anyhow::Result<()> {
         sqlx::query(
             r#"
             DELETE FROM tags
-            WHERE id = $1;
+            WHERE public_id = $1
+            ;
             "#,
         )
         .bind(tag_id)

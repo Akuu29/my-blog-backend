@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use blog_domain::model::{articles::article::Article, common::pagination::Pagination};
 use serde::Deserialize;
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
+use uuid::Uuid;
 use validator::Validate;
 
 #[serde_as]
@@ -10,7 +11,7 @@ use validator::Validate;
 pub struct ArticlesByTagFilter {
     #[serde_as(as = "Vec<DisplayFromStr>")]
     #[serde(default)]
-    pub tag_ids: Vec<i32>,
+    pub tag_ids: Vec<Uuid>,
 }
 
 #[async_trait]

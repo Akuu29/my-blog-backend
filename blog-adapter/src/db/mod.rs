@@ -1,4 +1,3 @@
-pub mod article_tags;
 pub mod articles;
 pub mod categories;
 pub mod comments;

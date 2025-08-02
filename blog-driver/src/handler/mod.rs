@@ -1,5 +1,4 @@
 pub mod article;
-pub mod article_tags;
 pub mod category;
 pub mod comment;
 pub mod image;

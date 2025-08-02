@@ -1,5 +1,6 @@
 use serde::Deserialize;
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
+use uuid::Uuid;
 use validator::Validate;
 
 #[serde_as]
@@ -7,7 +8,7 @@ use validator::Validate;
 #[serde(rename_all = "camelCase")]
 pub struct Pagination {
     #[serde_as(as = "Option<DisplayFromStr>")]
-    pub cursor: Option<i32>,
+    pub cursor: Option<Uuid>,
     #[serde_as(as = "DisplayFromStr")]
     #[serde(default = "default_per_page")]
     #[validate(range(min = 1, max = 100, message = "per_page must be between 1 and 100"))]

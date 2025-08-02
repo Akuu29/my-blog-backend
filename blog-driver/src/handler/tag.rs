@@ -19,6 +19,7 @@ use blog_domain::model::{
 };
 use http::StatusCode;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[tracing::instrument(name = "create_tag", skip(tag_app_service, token_app_service, token))]
 pub async fn create<T, U>(
@@ -79,7 +80,7 @@ pub async fn delete<T, U>(
     Extension(tag_app_service): Extension<Arc<TagAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
-    Path(tag_id): Path<i32>,
+    Path(tag_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ITagRepository,
@@ -107,7 +108,7 @@ where
 )]
 pub async fn find_tags_by_article_id<T>(
     Extension(tags_attached_article_query_service): Extension<Arc<T>>,
-    Path(article_id): Path<i32>,
+    Path(article_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ITagsAttachedArticleQueryService,

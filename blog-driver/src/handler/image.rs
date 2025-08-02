@@ -23,6 +23,7 @@ use blog_domain::model::{
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[tracing::instrument(
     name = "create_image",
@@ -81,7 +82,7 @@ where
 #[tracing::instrument(name = "find_data", skip(image_app_service))]
 pub async fn find_data<T>(
     Extension(image_app_service): Extension<Arc<ImageAppService<T>>>,
-    Path(image_id): Path<i32>,
+    Path(image_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IImageRepository,
@@ -113,7 +114,7 @@ pub async fn delete<T, U, E>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     Extension(article_image_query_service): Extension<Arc<E>>,
     AuthToken(token): AuthToken<AccessTokenString>,
-    Path(image_id): Path<i32>,
+    Path(image_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IImageRepository,

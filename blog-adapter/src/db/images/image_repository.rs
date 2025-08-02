@@ -5,6 +5,7 @@ use blog_domain::model::images::{
     image::{ImageData, ImageDataProps, NewImage},
 };
 use sqlx::QueryBuilder;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct ImageRepository {
@@ -27,7 +28,7 @@ impl IImageRepository for ImageRepository {
                 mime_type,
                 data,
                 url,
-                storage_type,
+                storage_type_id,
                 article_id
             )
             VALUES (
@@ -36,17 +37,26 @@ impl IImageRepository for ImageRepository {
                 $3,
                 $4,
                 $5,
-                $6
+                (SELECT id FROM articles WHERE public_id = $6)
             )
-            RETURNING *;
+            RETURNING
+                public_id,
+                name,
+                mime_type,
+                url,
+                (SELECT name FROM storage_types WHERE id = storage_type_id) AS storage_type,
+                $6 AS article_public_id,
+                created_at,
+                updated_at
+            ;
             "#,
         )
         .bind(new_image.name)
         .bind(new_image.mime_type)
         .bind(new_image.data)
         .bind(new_image.url)
-        .bind(new_image.storage_type.to_string())
-        .bind(new_image.article_id)
+        .bind(new_image.storage_type as i32)
+        .bind(new_image.article_public_id)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| match e {
@@ -58,50 +68,59 @@ impl IImageRepository for ImageRepository {
     }
 
     async fn all(&self, filter: ImageFilter) -> anyhow::Result<Vec<ImageDataProps>> {
-        let mut query = QueryBuilder::new(
+        let mut qb = QueryBuilder::new(
             r"
             SELECT
-                id,
-                name,
-                mime_type,
-                url,
-                storage_type,
-                article_id,
-                created_at,
-                updated_at
-            FROM images
+                i.public_id,
+                i.name,
+                i.mime_type,
+                i.url,
+                st.name AS storage_type,
+                a.public_id AS article_public_id,
+                i.created_at,
+                i.updated_at
+            FROM images AS i
+            LEFT JOIN storage_types AS st
+            ON i.storage_type_id = st.id
+            LEFT JOIN articles AS a
+            ON i.article_id = a.id
             ",
         );
 
-        let mut conditions = vec![];
+        let mut first = true;
+        let mut push_condition = |qb: &mut QueryBuilder<'_, sqlx::Postgres>| {
+            if first {
+                qb.push(" WHERE ");
+                first = false;
+            } else {
+                qb.push(" AND ");
+            }
+        };
 
-        if filter.article_id.is_some() {
-            conditions.push("article_id = $1");
+        if let Some(article_public_id) = filter.article_public_id {
+            push_condition(&mut qb);
+            qb.push("a.public_id = ").push_bind(article_public_id);
         }
 
-        if !conditions.is_empty() {
-            query.push(" WHERE ").push(conditions.join(" AND "));
-        }
+        qb.push(" ORDER BY i.id DESC;");
 
-        query.push(" ORDER BY id DESC; ");
-
-        let images = query
+        let images = qb
             .build_query_as::<ImageDataProps>()
-            .bind(filter.article_id)
             .fetch_all(&self.pool)
             .await?;
 
         Ok(images)
     }
 
-    async fn find_data(&self, image_id: i32) -> anyhow::Result<ImageData> {
+    async fn find_data(&self, image_id: Uuid) -> anyhow::Result<ImageData> {
         let image_data = sqlx::query_as::<_, ImageData>(
             r#"
             SELECT
                 mime_type,
                 data
             FROM images
-            WHERE id = $1;
+            WHERE public_id = $1
+            ;
             "#,
         )
         .bind(image_id)
@@ -115,11 +134,12 @@ impl IImageRepository for ImageRepository {
         Ok(image_data)
     }
 
-    async fn delete(&self, image_id: i32) -> anyhow::Result<()> {
+    async fn delete(&self, image_id: Uuid) -> anyhow::Result<()> {
         sqlx::query(
             r#"
             DELETE FROM images
-            WHERE id = $1;
+            WHERE public_id = $1
+            ;
             "#,
         )
         .bind(image_id)

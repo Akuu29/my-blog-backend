@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use blog_app::query_service::tags_attached_article::i_tags_attached_article_query_service::ITagsAttachedArticleQueryService;
 use blog_domain::model::tags::tag::Tag;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct TagsAttachedArticleQueryService {
@@ -15,17 +16,17 @@ impl TagsAttachedArticleQueryService {
 
 #[async_trait]
 impl ITagsAttachedArticleQueryService for TagsAttachedArticleQueryService {
-    async fn find_tags_by_article_id(&self, article_id: i32) -> anyhow::Result<Vec<Tag>> {
+    async fn find_tags_by_article_id(&self, article_id: Uuid) -> anyhow::Result<Vec<Tag>> {
         let tags = sqlx::query_as::<_, Tag>(
             r#"
             SELECT
-                t.id as id,
-                t.name as name,
-                t.created_at as created_at,
-                t.updated_at as updated_at
-            FROM tags as t
-            INNER JOIN article_tags as at ON t.id = at.tag_id
-            WHERE at.article_id = $1
+                t.public_id AS public_id,
+                t.name AS name,
+                t.created_at AS created_at,
+                t.updated_at AS updated_at
+            FROM tags AS t
+            INNER JOIN article_tags AS at ON t.id = at.tag_id
+            WHERE at.article_id = (SELECT id FROM articles WHERE public_id = $1)
             "#,
         )
         .bind(article_id)

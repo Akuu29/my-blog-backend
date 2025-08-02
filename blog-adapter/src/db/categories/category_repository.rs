@@ -5,7 +5,8 @@ use blog_domain::model::categories::{
     category::{Category, CategoryFilter, NewCategory, UpdateCategory},
     i_category_repository::ICategoryRepository,
 };
-use sqlx::{query_builder::QueryBuilder, types::Uuid};
+use sqlx::query_builder::QueryBuilder;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct CategoryRepository {
@@ -29,9 +30,14 @@ impl ICategoryRepository for CategoryRepository {
             )
             VALUES (
                 $1,
-                $2
+                (SELECT id FROM users WHERE public_id = $2)
             )
-            RETURNING *;
+            RETURNING
+                public_id,
+                name,
+                created_at,
+                updated_at
+            ;
             "#,
         )
         .bind(payload.name)
@@ -43,10 +49,10 @@ impl ICategoryRepository for CategoryRepository {
     }
 
     async fn all(&self, category_filter: CategoryFilter) -> anyhow::Result<Vec<Category>> {
-        let mut query = QueryBuilder::new(
+        let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                id,
+                public_id,
                 name,
                 created_at,
                 updated_at
@@ -54,40 +60,49 @@ impl ICategoryRepository for CategoryRepository {
             "#,
         );
 
-        let mut conditions = vec![];
+        let mut first = true;
+        let mut push_condition = |qb: &mut QueryBuilder<'_, sqlx::Postgres>| {
+            if first {
+                qb.push(" WHERE ");
+                first = false;
+            } else {
+                qb.push(" AND ");
+            }
+        };
 
-        if category_filter.id.is_some() {
-            conditions.push("id = $1");
+        if let Some(public_id) = category_filter.public_id {
+            push_condition(&mut qb);
+            qb.push("public_id = ").push_bind(public_id);
         }
 
-        if category_filter.name.is_some() {
-            conditions.push("name = $2");
+        if let Some(name) = category_filter.name {
+            push_condition(&mut qb);
+            qb.push("name = ").push_bind(name);
         }
 
-        if !conditions.is_empty() {
-            query.push(" WHERE ").push(conditions.join(" AND "));
-        }
+        qb.push(" ORDER BY id;");
 
-        query.push(" ORDER BY id;");
-
-        let categories = query
+        let categories = qb
             .build_query_as::<Category>()
-            .bind(category_filter.id)
-            .bind(category_filter.name)
             .fetch_all(&self.pool)
             .await?;
 
         Ok(categories)
     }
 
-    async fn update(&self, category_id: i32, payload: UpdateCategory) -> anyhow::Result<Category> {
+    async fn update(&self, category_id: Uuid, payload: UpdateCategory) -> anyhow::Result<Category> {
         let category = sqlx::query_as::<_, Category>(
             r#"
             UPDATE categories
             SET
                 name = $1
-            WHERE id = $2
-            RETURNING *;
+            WHERE public_id = $2
+            RETURNING
+                public_id,
+                name,
+                created_at,
+                updated_at
+            ;
             "#,
         )
         .bind(payload.name)
@@ -98,11 +113,12 @@ impl ICategoryRepository for CategoryRepository {
         Ok(category)
     }
 
-    async fn delete(&self, category_id: i32) -> anyhow::Result<()> {
+    async fn delete(&self, category_id: Uuid) -> anyhow::Result<()> {
         sqlx::query(
             r#"
             DELETE FROM categories
-            WHERE id = $1;
+            WHERE public_id = $1
+            ;
             "#,
         )
         .bind(category_id)
