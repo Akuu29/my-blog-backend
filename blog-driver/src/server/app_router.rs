@@ -5,8 +5,8 @@ use crate::{
 };
 use axum::extract::DefaultBodyLimit;
 use axum::{
-    routing::{delete, get, patch, post},
     Extension, Router,
+    routing::{delete, get, patch, post},
 };
 use blog_app::{
     query_service::{
@@ -117,7 +117,6 @@ impl AppRouter {
         U: IUserRepository,
     {
         Router::new()
-            .route("/verify", get(token::verify_id_token::<T, U>))
             .route("/refresh", get(token::refresh_access_token::<T, U>))
             .route("/reset", get(token::reset_refresh_token))
             .layer(Extension(Arc::new(cookie_service)))
@@ -129,7 +128,8 @@ impl AppRouter {
         U: IUserRepository,
     {
         Router::new()
-            .route("/protected", post(user::create::<U, T>))
+            .route("/signup", post(user::sign_up::<T, U>))
+            .route("/signin", post(user::sign_in::<T, U>))
             .route(
                 "/:user_id",
                 get(user::find::<U>)

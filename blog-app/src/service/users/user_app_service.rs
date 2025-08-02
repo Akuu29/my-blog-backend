@@ -21,9 +21,14 @@ impl<T: IUserRepository> UserAppService<T> {
         self.repository.find(user_id).await
     }
 
-    // TODO Bad approach because it's not scalable
-    pub async fn find_by_idp_sub(&self, idp_sub: &str) -> anyhow::Result<User> {
-        self.repository.find_by_idp_sub(idp_sub).await
+    pub async fn find_by_user_identity(
+        &self,
+        provider_name: &str,
+        idp_sub: &str,
+    ) -> anyhow::Result<User> {
+        self.repository
+            .find_by_user_identity(provider_name, idp_sub)
+            .await
     }
 
     pub async fn update(&self, user_id: Uuid, payload: UpdateUser) -> anyhow::Result<User> {
