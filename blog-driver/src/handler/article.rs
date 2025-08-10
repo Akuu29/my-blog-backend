@@ -176,8 +176,8 @@ where
     name = "delete_article",
     skip(article_app_service, token_app_service, token)
 )]
-pub async fn delete_article<T, U, W>(
-    Extension(article_app_service): Extension<Arc<ArticleAppService<T, W>>>,
+pub async fn delete_article<T, U, V>(
+    Extension(article_app_service): Extension<Arc<ArticleAppService<T, V>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(article_id): Path<Uuid>,
@@ -185,7 +185,7 @@ pub async fn delete_article<T, U, W>(
 where
     T: IArticleRepository,
     U: ITokenRepository,
-    W: ITagRepository,
+    V: ITagRepository,
 {
     let _access_token_data = token_app_service
         .verify_access_token(token)
@@ -211,17 +211,17 @@ where
     name = "attach_tags",
     skip(article_app_service, token_app_service, token)
 )]
-pub async fn attach_tags<U, V, W>(
-    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
-    Extension(article_app_service): Extension<Arc<ArticleAppService<V, W>>>,
+pub async fn attach_tags<T, U, V>(
+    Extension(token_app_service): Extension<Arc<TokenAppService<T>>>,
+    Extension(article_app_service): Extension<Arc<ArticleAppService<U, V>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(article_id): Path<Uuid>,
     Json(tag_ids): Json<Vec<Uuid>>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
-    U: ITokenRepository,
-    V: IArticleRepository,
-    W: ITagRepository,
+    T: ITokenRepository,
+    U: IArticleRepository,
+    V: ITagRepository,
 {
     let _access_token_data = token_app_service
         .verify_access_token(token)

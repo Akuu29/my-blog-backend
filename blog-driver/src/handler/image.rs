@@ -29,15 +29,15 @@ use uuid::Uuid;
     name = "create_image",
     skip(image_app_service, token_app_service, token)
 )]
-pub async fn create<T, U>(
-    Extension(image_app_service): Extension<Arc<ImageAppService<T>>>,
-    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+pub async fn create<TokenRepo, U>(
+    Extension(image_app_service): Extension<Arc<ImageAppService<U>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<TokenRepo>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedImage(new_image): ValidatedImage,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
-    T: IImageRepository,
-    U: ITokenRepository,
+    TokenRepo: ITokenRepository,
+    U: IImageRepository,
 {
     let _token_data = token_app_service
         .verify_access_token(token)
@@ -109,16 +109,16 @@ where
         token,
     )
 )]
-pub async fn delete<T, U, E>(
-    Extension(image_app_service): Extension<Arc<ImageAppService<T>>>,
-    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+pub async fn delete<TokenRepo, U, E>(
+    Extension(image_app_service): Extension<Arc<ImageAppService<U>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<TokenRepo>>>,
     Extension(article_image_query_service): Extension<Arc<E>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(image_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
-    T: IImageRepository,
-    U: ITokenRepository,
+    TokenRepo: ITokenRepository,
+    U: IImageRepository,
     E: IArticleImageQueryService,
 {
     let token_data = token_app_service
