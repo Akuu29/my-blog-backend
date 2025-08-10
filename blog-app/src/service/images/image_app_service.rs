@@ -14,15 +14,13 @@ impl<T: IImageRepository> ImageAppService<T> {
     }
 
     pub async fn create(&self, new_image: NewImage) -> anyhow::Result<ImageDataProps> {
-        let result = self.repository.create(new_image).await;
-
-        let mut image = result.unwrap();
+        let mut image = self.repository.create(new_image).await?;
         let image_url = match image.storage_type.to_string().as_str() {
-            "Database" => {
+            "database" => {
                 format!(
                     "{}://{}/images/{}",
-                    std::env::var("GATEWAY_PROTOCOL").unwrap(),
-                    std::env::var("GATEWAY_DOMAIN").unwrap(),
+                    std::env::var("GATEWAY_PROTOCOL").expect("undefined GATEWAY_PROTOCOL"),
+                    std::env::var("GATEWAY_DOMAIN").expect("undefined GATEWAY_DOMAIN"),
                     image.public_id
                 )
             }
@@ -39,11 +37,11 @@ impl<T: IImageRepository> ImageAppService<T> {
 
         for image in images.iter_mut() {
             let image_url = match image.storage_type.to_string().as_str() {
-                "Database" => {
+                "database" => {
                     format!(
                         "{}://{}/images/{}",
-                        std::env::var("GATEWAY_PROTOCOL").unwrap(),
-                        std::env::var("GATEWAY_DOMAIN").unwrap(),
+                        std::env::var("GATEWAY_PROTOCOL").expect("undefined GATEWAY_PROTOCOL"),
+                        std::env::var("GATEWAY_DOMAIN").expect("undefined GATEWAY_DOMAIN"),
                         image.public_id
                     )
                 }

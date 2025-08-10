@@ -86,9 +86,11 @@ impl IArticleRepository for ArticleRepository {
             FROM articles AS a
             LEFT JOIN categories AS c
             ON a.category_id = c.id
-            WHERE a.public_id = $1
+            WHERE a.public_id = 
             "#,
         );
+
+        qb.push_bind(article_id);
 
         if let Some(user_id) = article_filter.user_id {
             qb.push(" AND a.user_id = ").push_bind(user_id);
@@ -100,7 +102,6 @@ impl IArticleRepository for ArticleRepository {
 
         let article = qb
             .build_query_as::<Article>()
-            .bind(article_id)
             .fetch_one(&self.pool)
             .await
             .map_err(|e| match e {
@@ -291,7 +292,7 @@ impl IArticleRepository for ArticleRepository {
         )
         .bind(article_id)
         .bind(tag_ids)
-        .fetch_all(&mut *tx)
+        .execute(&mut *tx)
         .await?;
 
         tx.commit().await?;

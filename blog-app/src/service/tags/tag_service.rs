@@ -1,4 +1,5 @@
 use blog_domain::model::tags::i_tag_repository::{ITagRepository, TagFilter};
+use std::collections::HashSet;
 use uuid::Uuid;
 
 pub struct TagService<T>
@@ -17,17 +18,17 @@ where
     }
 
     pub async fn exists_tags(&self, tag_ids: Vec<Uuid>) -> anyhow::Result<bool> {
-        let tag_ids_len = tag_ids.len();
+        if tag_ids.is_empty() {
+            return Ok(true);
+        }
+
+        let unique_tag_ids = tag_ids.into_iter().collect::<HashSet<Uuid>>();
         let tag_filter = TagFilter {
-            tag_ids: Some(tag_ids),
+            tag_ids: Some(unique_tag_ids.iter().copied().collect()),
             ..Default::default()
         };
         let tags = self.repository.all(tag_filter).await?;
 
-        if tags.len() != tag_ids_len {
-            return Err(anyhow::anyhow!("Tag not found"));
-        }
-
-        Ok(true)
+        Ok(tags.len() == unique_tag_ids.len())
     }
 }

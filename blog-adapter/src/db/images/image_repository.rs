@@ -23,6 +23,12 @@ impl IImageRepository for ImageRepository {
     async fn create(&self, new_image: NewImage) -> anyhow::Result<ImageDataProps> {
         let image = sqlx::query_as::<_, ImageDataProps>(
             r#"
+            WITH sel_storage_type_id AS (
+                    SELECT id FROM storage_types WHERE name = $5
+                ),
+                sel_article_id AS (
+                    SELECT id FROM articles WHERE public_id = $6
+                )
             INSERT INTO images (
                 name,
                 mime_type,
@@ -31,20 +37,20 @@ impl IImageRepository for ImageRepository {
                 storage_type_id,
                 article_id
             )
-            VALUES (
+            SELECT
                 $1,
                 $2,
                 $3,
                 $4,
-                $5,
-                (SELECT id FROM articles WHERE public_id = $6)
-            )
+                sel_storage_type_id.id,
+                sel_article_id.id
+            FROM sel_storage_type_id, sel_article_id
             RETURNING
                 public_id,
                 name,
                 mime_type,
                 url,
-                (SELECT name FROM storage_types WHERE id = storage_type_id) AS storage_type,
+                $5 AS storage_type,
                 $6 AS article_public_id,
                 created_at,
                 updated_at
@@ -55,7 +61,7 @@ impl IImageRepository for ImageRepository {
         .bind(new_image.mime_type)
         .bind(new_image.data)
         .bind(new_image.url)
-        .bind(new_image.storage_type as i32)
+        .bind(new_image.storage_type.to_string())
         .bind(new_image.article_public_id)
         .fetch_one(&self.pool)
         .await

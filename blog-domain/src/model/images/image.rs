@@ -33,7 +33,7 @@ pub struct ImageDataProps {
 #[derive(Debug, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "storage_type", rename_all = "lowercase")]
 pub enum StorageType {
-    Database = 1,
+    Database,
 }
 
 impl fmt::Display for StorageType {

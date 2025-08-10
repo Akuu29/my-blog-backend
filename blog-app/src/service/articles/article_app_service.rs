@@ -90,10 +90,17 @@ where
 
     pub async fn attach_tags(&self, article_id: Uuid, tag_ids: Vec<Uuid>) -> anyhow::Result<()> {
         // check if the article exists
-        self.article_service.exists(article_id).await?;
+        self.article_service
+            .ensure_exists_article(article_id)
+            .await?;
 
         // check if the tags exists
-        self.tag_service.exists_tags(tag_ids.clone()).await?;
+        let exists_tags = self.tag_service.exists_tags(tag_ids.clone()).await?;
+        if !exists_tags {
+            return Err(anyhow::anyhow!(UsecaseError::ValidationFailed(
+                "tag not found".to_string()
+            )));
+        }
 
         self.article_repository
             .attach_tags(article_id, tag_ids)

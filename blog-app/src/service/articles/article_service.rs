@@ -16,7 +16,8 @@ where
         Self { repository }
     }
 
-    pub async fn exists(&self, article_id: Uuid) -> anyhow::Result<bool> {
+    /// Ensures the article exists; returns Ok(()) if found, otherwise bubbles up repository errors.
+    pub async fn ensure_exists_article(&self, article_id: Uuid) -> anyhow::Result<bool> {
         self.repository
             .find(article_id, ArticleFilter::default())
             .await?;
