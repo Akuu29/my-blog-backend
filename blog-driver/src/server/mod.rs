@@ -3,14 +3,12 @@ use axum::http::Method;
 use axum_extra::extract::cookie::Key;
 use blog_adapter::{
     db::{
-        article_tags::article_tags_repository::ArticleTagsRepository,
         articles::article_repository::ArticleRepository,
         categories::category_repository::CategoryRepository,
         comments::comment_repository::CommentRepository,
         images::image_repository::ImageRepository,
         query_service::{
             article_image::article_image_query_service::ArticleImageQueryService,
-            articles_by_category::articles_category_query_service::ArticlesByCategoryQueryService,
             articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService,
             tags_attached_article::tags_attached_article_query_service::TagsAttachedArticleQueryService,
         },
@@ -20,11 +18,12 @@ use blog_adapter::{
     idp::tokens::token_repository::TokenRepository,
 };
 use blog_app::service::{
-    article_tags::article_tags_app_service::ArticleTagsAppService,
-    articles::article_app_service::ArticleAppService,
+    articles::{article_app_service::ArticleAppService, article_service::ArticleService},
     categories::category_app_service::CategoryAppService,
-    comments::comment_app_service::CommentAppService, images::image_app_service::ImageAppService,
-    tags::tag_app_service::TagAppService, tokens::token_app_service::TokenAppService,
+    comments::comment_app_service::CommentAppService,
+    images::image_app_service::ImageAppService,
+    tags::{tag_app_service::TagAppService, tag_service::TagService},
+    tokens::token_app_service::TokenAppService,
     users::user_app_service::UserAppService,
 };
 use http::{
@@ -52,19 +51,24 @@ pub async fn run() {
 
     let http_client = reqwest::Client::new();
 
+    // domain services
+    let article_service = ArticleService::new(ArticleRepository::new(pool.clone()));
+    let tag_service = TagService::new(TagRepository::new(pool.clone()));
+
     // app services
-    let article_app_service = ArticleAppService::new(ArticleRepository::new(pool.clone()));
+    let article_app_service = ArticleAppService::new(
+        ArticleRepository::new(pool.clone()),
+        article_service,
+        tag_service,
+    );
     let comment_app_service = CommentAppService::new(CommentRepository::new(pool.clone()));
     let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
     let category_app_service = CategoryAppService::new(CategoryRepository::new(pool.clone()));
     let tag_app_service = TagAppService::new(TagRepository::new(pool.clone()));
-    let article_tags_app_service =
-        ArticleTagsAppService::new(ArticleTagsRepository::new(pool.clone()));
     let token_app_service = TokenAppService::new(TokenRepository::new(http_client.clone()));
     let image_app_service = ImageAppService::new(ImageRepository::new(pool.clone()));
 
     // query services
-    let articles_by_category_query_service = ArticlesByCategoryQueryService::new(pool.clone());
     let article_by_tag_query_service = ArticlesByTagQueryService::new(pool.clone());
     let tags_attached_article_query_service = TagsAttachedArticleQueryService::new(pool.clone());
     let article_image_query_service = ArticleImageQueryService::new(pool.clone());
@@ -79,7 +83,15 @@ pub async fn run() {
         .map(|addr| addr.parse::<HeaderValue>().unwrap())
         .collect::<Vec<HeaderValue>>();
     let cors_layer = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+            Method::HEAD,
+        ])
         .allow_origin(client_addrs)
         .allow_credentials(true)
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE, COOKIE]);
@@ -97,8 +109,6 @@ pub async fn run() {
         comment_app_service,
         category_app_service,
         tag_app_service,
-        article_tags_app_service,
-        articles_by_category_query_service,
         article_by_tag_query_service,
         tags_attached_article_query_service,
         image_app_service,

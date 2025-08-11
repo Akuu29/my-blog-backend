@@ -12,6 +12,7 @@ use axum::{
     http::StatusCode,
 };
 use blog_domain::model::images::image::{NewImage, StorageType};
+use uuid::Uuid;
 use validator::Validate;
 
 #[derive(Debug)]
@@ -91,12 +92,12 @@ where
                         )
                     })?);
                 }
-                "article_id" => {
+                "articleId" => {
                     article_id = Some(field.text().await.map_err(|e| {
                         tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror=%e.to_string());
                         let err_msg = ErrorMessage::new(
                             ErrorMessageKind::BadRequest,
-                            "Failed to read article_id".to_string(),
+                            "Failed to read articleId".to_string(),
                         );
                         ApiResponse::new(
                             StatusCode::BAD_REQUEST,
@@ -112,13 +113,40 @@ where
         let kind =
             infer::get(&file_data).ok_or(ApiResponse::new(StatusCode::BAD_REQUEST, None, None))?;
 
+        let article_public_id = match article_id.as_deref() {
+            Some(id) => id.parse::<Uuid>().map_err(|e| {
+                tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror=%e.to_string());
+                let err_msg = ErrorMessage::new(
+                    ErrorMessageKind::BadRequest,
+                    "Failed to parse articleId".to_string(),
+                );
+                ApiResponse::new(
+                    StatusCode::BAD_REQUEST,
+                    Some(serde_json::to_string(&err_msg).unwrap()),
+                    None,
+                )
+            })?,
+            None => {
+                tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror="articleId is required");
+                let err_msg = ErrorMessage::new(
+                    ErrorMessageKind::BadRequest,
+                    "articleId is required".to_string(),
+                );
+                return Err(ApiResponse::new(
+                    StatusCode::BAD_REQUEST,
+                    Some(serde_json::to_string(&err_msg).unwrap()),
+                    None,
+                ));
+            }
+        };
+
         let new_image = NewImage {
             name: filename.unwrap(),
             mime_type: kind.mime_type().to_string(),
             data: file_data,
             url: None,
             storage_type: StorageType::Database,
-            article_id: article_id.unwrap().parse::<i32>().unwrap(),
+            article_public_id,
         };
 
         new_image.validate().map_err(|e| {

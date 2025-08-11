@@ -14,4 +14,5 @@ async-trait.workspace = true
 sqlx.workspace = true
 serde_with.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 jsonwebtoken = "9.3.0"

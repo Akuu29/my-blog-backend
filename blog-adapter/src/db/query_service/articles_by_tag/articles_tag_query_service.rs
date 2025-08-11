@@ -25,19 +25,26 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
     ) -> anyhow::Result<Vec<Article>> {
         let mut query_builder = QueryBuilder::new(
             r#"
+            WITH tag_ids AS (
+                SELECT id
+                FROM tags
+                WHERE public_id = ANY ($1)
+            )
             SELECT
-                DISTINCT ON (a.id)
-                a.id as id,
-                a.title as title,
-                a.body as body,
-                a.status as status,
-                a.user_id as user_id,
-                a.category_id as category_id,
-                a.created_at as created_at,
-                a.updated_at as updated_at
-            FROM articles as a
-            INNER JOIN article_tags as at ON a.id = at.article_id
-            WHERE at.tag_id = ANY($1)
+                public_id,
+                title,
+                body,
+                status,
+                (SELECT public_id FROM categories WHERE id = category_id) as category_public_id,
+                created_at,
+                updated_at
+            FROM articles a
+            WHERE EXISTS (
+                SELECT 1
+                FROM article_tags AS at
+                WHERE at.article_id = a.id
+                AND at.tag_id = ANY (SELECT id FROM tag_ids)
+            )
             "#,
         );
 

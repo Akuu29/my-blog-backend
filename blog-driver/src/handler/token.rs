@@ -21,15 +21,15 @@ use std::sync::Arc;
     name = "refresh_access_token",
     skip(token_app_service, user_app_service, cookie_service, jar)
 )]
-pub async fn refresh_access_token<S, T>(
-    Extension(token_app_service): Extension<Arc<TokenAppService<S>>>,
-    Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+pub async fn refresh_access_token<T, U>(
+    Extension(token_app_service): Extension<Arc<TokenAppService<T>>>,
+    Extension(user_app_service): Extension<Arc<UserAppService<U>>>,
     Extension(cookie_service): Extension<Arc<CookieService>>,
     jar: PrivateCookieJar,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
-    S: ITokenRepository,
-    T: IUserRepository,
+    T: ITokenRepository,
+    U: IUserRepository,
 {
     let refresh_token = cookie_service.get_refresh_token(&jar).map_err(|e| {
         let app_err = AppError::from(e);

@@ -2,7 +2,7 @@ use blog_domain::model::categories::{
     category::{Category, CategoryFilter, NewCategory, UpdateCategory},
     i_category_repository::ICategoryRepository,
 };
-use sqlx::types::Uuid;
+use uuid::Uuid;
 
 pub struct CategoryAppService<T: ICategoryRepository> {
     repository: T,
@@ -23,13 +23,13 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
 
     pub async fn update(
         &self,
-        category_id: i32,
+        category_id: Uuid,
         payload: UpdateCategory,
     ) -> anyhow::Result<Category> {
         self.repository.update(category_id, payload).await
     }
 
-    pub async fn delete(&self, category_id: i32) -> anyhow::Result<()> {
+    pub async fn delete(&self, category_id: Uuid) -> anyhow::Result<()> {
         self.repository.delete(category_id).await
     }
 }

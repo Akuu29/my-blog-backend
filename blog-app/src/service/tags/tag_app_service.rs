@@ -21,7 +21,7 @@ impl<T: ITagRepository> TagAppService<T> {
         self.repository.all(tag_filter).await
     }
 
-    pub async fn delete(&self, tag_id: i32) -> anyhow::Result<()> {
+    pub async fn delete(&self, tag_id: Uuid) -> anyhow::Result<()> {
         self.repository.delete(tag_id).await
     }
 }
