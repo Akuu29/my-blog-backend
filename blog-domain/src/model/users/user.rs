@@ -19,7 +19,9 @@ pub enum UserRole {
 }
 
 #[derive(Debug, FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
+    #[serde(rename = "id")]
     pub public_id: Uuid,
     pub name: String,
     pub role: UserRole,

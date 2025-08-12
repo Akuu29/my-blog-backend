@@ -134,6 +134,7 @@ impl AppRouter {
         U: IUserRepository,
     {
         Router::new()
+            .route("/", get(user::all::<U>))
             .route("/signup", post(user::sign_up::<T, U>))
             .route("/signin", post(user::sign_in::<T, U>))
             .route(
