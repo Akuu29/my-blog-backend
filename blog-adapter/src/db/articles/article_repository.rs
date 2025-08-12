@@ -157,6 +157,12 @@ impl IArticleRepository for ArticleRepository {
             qb.push("c.public_id = ").push_bind(category_public_id);
         }
 
+        if let Some(title_contains) = article_filter.title_contains {
+            push_condition(&mut qb);
+            qb.push("a.title ILIKE ")
+                .push_bind(format!("%{}%", title_contains));
+        }
+
         if let Some(cursor) = pagination.cursor {
             let cid_option = sqlx::query_scalar!(
                 r#"
@@ -164,7 +170,6 @@ impl IArticleRepository for ArticleRepository {
                 "#,
                 cursor
             )
-            // .bind(cursor)
             .fetch_optional(&self.pool)
             .await?;
 

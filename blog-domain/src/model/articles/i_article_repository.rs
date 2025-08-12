@@ -17,6 +17,8 @@ pub struct ArticleFilter {
     #[serde_as(as = "Option<DisplayFromStr>")]
     #[serde(rename = "categoryId")]
     pub category_public_id: Option<Uuid>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub title_contains: Option<String>,
 }
 
 impl ArticleFilter {
@@ -24,11 +26,13 @@ impl ArticleFilter {
         user_id: Option<Uuid>,
         status: Option<ArticleStatus>,
         category_public_id: Option<Uuid>,
+        title_contains: Option<String>,
     ) -> Self {
         Self {
             user_id,
             status,
             category_public_id,
+            title_contains,
         }
     }
 }

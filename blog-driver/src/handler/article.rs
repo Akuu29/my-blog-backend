@@ -1,7 +1,8 @@
 use crate::{
     model::{
         api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
-        validated_json::ValidatedJson, validated_query_param::ValidatedQueryParam,
+        paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
+        validated_query_param::ValidatedQueryParam,
     },
     utils::{app_error::AppError, error_handler::ErrorHandler},
 };
@@ -93,30 +94,17 @@ where
     ))
 }
 
-#[derive(Debug, Deserialize, Validate)]
-pub struct AllArticlesQueryParam {
-    #[serde(flatten)]
-    #[validate(nested)]
-    pub article_filter: ArticleFilter,
-    #[serde(flatten)]
-    #[validate(nested)]
-    pub pagination: Pagination,
-}
-
 #[tracing::instrument(name = "all_articles", skip(article_app_service))]
 pub async fn all_articles<T, U>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T, U>>>,
-    ValidatedQueryParam(query_param): ValidatedQueryParam<AllArticlesQueryParam>,
+    ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<ArticleFilter>>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IArticleRepository,
     U: ITagRepository,
 {
-    let article_filter = query_param.article_filter;
-    let pagination = query_param.pagination;
-
     let articles = article_app_service
-        .all(article_filter, pagination)
+        .all(param.filter, param.pagination)
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
