@@ -13,6 +13,7 @@ use validator::Validate;
 #[serde(rename_all = "camelCase")]
 pub struct UserFilter {
     #[serde_as(as = "Option<DisplayFromStr>")]
+    #[validate(length(max = 100, message = "name_contains length must be 100 or less"))]
     pub name_contains: Option<String>,
 }
 
