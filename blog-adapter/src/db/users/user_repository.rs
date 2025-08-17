@@ -219,7 +219,7 @@ impl IUserRepository for UserRepository {
         sqlx::query(
             r#"
             DELETE FROM users
-            WHERE id = $1;
+            WHERE public_id = $1;
             "#,
         )
         .bind(user_id)
