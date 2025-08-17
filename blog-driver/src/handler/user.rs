@@ -1,5 +1,9 @@
 use crate::{
-    model::{api_response::ApiResponse, auth_token::AuthToken, validated_json::ValidatedJson},
+    model::{
+        api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
+        paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
+        validated_query_param::ValidatedQueryParam,
+    },
     service::cookie_service::CookieService,
     utils::{app_error::AppError, error_handler::ErrorHandler},
 };
@@ -18,7 +22,7 @@ use blog_domain::model::{
         i_token_repository::ITokenRepository, token::ApiCredentials, token_string::IdTokenString,
     },
     users::{
-        i_user_repository::IUserRepository,
+        i_user_repository::{IUserRepository, UserFilter},
         user::{NewUser, UpdateUser},
     },
 };
@@ -193,6 +197,31 @@ where
     }
 
     response
+}
+
+pub async fn all<T>(
+    Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+    ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<UserFilter>>,
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: IUserRepository,
+{
+    let users = user_app_service
+        .all(param.filter, param.pagination)
+        .await
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to get users")
+        })?;
+
+    let next_cursor = users.last().map(|user| user.public_id).or(None);
+    let paged_body = PagedBody::new(users, next_cursor);
+
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&paged_body).unwrap()),
+        None,
+    ))
 }
 
 #[tracing::instrument(name = "find_user", skip(user_app_service))]

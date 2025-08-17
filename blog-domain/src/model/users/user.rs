@@ -18,14 +18,22 @@ pub enum UserRole {
     User,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
+    #[serde(rename = "id")]
     pub public_id: Uuid,
     pub name: String,
+    #[serde(skip)]
     pub role: UserRole,
+    #[serde(skip)]
     pub is_active: bool,
-    pub last_login_at: Option<DateTime<Local>>,
+    #[serde(skip)]
+    last_login_at: Option<DateTime<Local>>,
+    #[serde(skip)]
     created_at: DateTime<Local>,
+    #[serde(skip)]
     updated_at: DateTime<Local>,
 }
 

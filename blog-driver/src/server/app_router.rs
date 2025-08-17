@@ -134,6 +134,7 @@ impl AppRouter {
         U: IUserRepository,
     {
         Router::new()
+            .route("/", get(user::all::<U>))
             .route("/signup", post(user::sign_up::<T, U>))
             .route("/signin", post(user::sign_in::<T, U>))
             .route(
@@ -167,8 +168,8 @@ impl AppRouter {
             )
             .route("/:article_id/tags", put(article::attach_tags::<T, U, X>))
             .route("/tags", get(article::find_articles_by_tag::<V>))
-            .layer(Extension(Arc::new(article_app_service)))
-            .layer(Extension(Arc::new(article_by_tag_query_service)))
+            .route_layer(Extension(Arc::new(article_app_service)))
+            .route_layer(Extension(Arc::new(article_by_tag_query_service)))
     }
 
     fn create_comments_router<T>(comment_app_service: CommentAppService<T>) -> Router<AppState>
@@ -187,7 +188,7 @@ impl AppRouter {
                 "/related/:article_id",
                 get(comment::find_by_article_id::<T>),
             )
-            .layer(Extension(Arc::new(comment_app_service)))
+            .route_layer(Extension(Arc::new(comment_app_service)))
     }
 
     fn create_category_router<T, U>(category_app_service: CategoryAppService<U>) -> Router<AppState>
@@ -204,7 +205,7 @@ impl AppRouter {
                 "/:category_id",
                 patch(category::update_category::<U, T>).delete(category::delete_category::<U, T>),
             )
-            .layer(Extension(Arc::new(category_app_service)))
+            .route_layer(Extension(Arc::new(category_app_service)))
     }
 
     fn create_tag_router<T, U, V>(tags_attached_article_query_service: V) -> Router<AppState>
@@ -220,7 +221,7 @@ impl AppRouter {
                 "/article/:article_id",
                 get(tag::find_tags_by_article_id::<V>),
             )
-            .layer(Extension(Arc::new(tags_attached_article_query_service)))
+            .route_layer(Extension(Arc::new(tags_attached_article_query_service)))
     }
 
     fn create_image_router<T, U, V>(
@@ -238,7 +239,7 @@ impl AppRouter {
                 "/:image_id",
                 get(image::find_data::<U>).delete(image::delete::<T, U, V>),
             )
-            .layer(Extension(Arc::new(image_app_service)))
-            .layer(Extension(Arc::new(article_image_query_service)))
+            .route_layer(Extension(Arc::new(image_app_service)))
+            .route_layer(Extension(Arc::new(article_image_query_service)))
     }
 }

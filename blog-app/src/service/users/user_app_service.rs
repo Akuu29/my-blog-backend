@@ -1,6 +1,9 @@
-use blog_domain::model::users::{
-    i_user_repository::IUserRepository,
-    user::{NewUser, UpdateUser, User},
+use blog_domain::model::{
+    common::pagination::Pagination,
+    users::{
+        i_user_repository::{IUserRepository, UserFilter},
+        user::{NewUser, UpdateUser, User},
+    },
 };
 use sqlx::types::Uuid;
 
@@ -15,6 +18,14 @@ impl<T: IUserRepository> UserAppService<T> {
 
     pub async fn create(&self, payload: NewUser) -> anyhow::Result<User> {
         self.repository.create(payload).await
+    }
+
+    pub async fn all(
+        &self,
+        user_filter: UserFilter,
+        pagination: Pagination,
+    ) -> anyhow::Result<Vec<User>> {
+        self.repository.all(user_filter, pagination).await
     }
 
     pub async fn find(&self, user_id: Uuid) -> anyhow::Result<User> {
