@@ -1,7 +1,7 @@
 use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::{
-    common::pagination::Pagination,
+    common::{item_count::ItemCount, pagination::Pagination},
     users::{
         i_user_repository::{IUserRepository, UserFilter},
         user::{NewUser, UpdateUser, User},
@@ -17,6 +17,31 @@ pub struct UserRepository {
 impl UserRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
+    }
+
+    /// push user where conditions to the query builder
+    fn push_user_condition(
+        &self,
+        qb: &mut QueryBuilder<'_, sqlx::Postgres>,
+        filter: &UserFilter,
+    ) -> bool {
+        let mut has_condition = false;
+        let mut push_condition = |qb: &mut QueryBuilder<'_, sqlx::Postgres>| {
+            if !has_condition {
+                qb.push(" WHERE ");
+                has_condition = true;
+            } else {
+                qb.push(" AND ");
+            }
+        };
+
+        if let Some(name_contains) = filter.name_contains.clone() {
+            push_condition(qb);
+            qb.push("name ILIKE ")
+                .push_bind(format!("%{}%", name_contains));
+        }
+
+        return has_condition;
     }
 }
 
@@ -80,7 +105,8 @@ impl IUserRepository for UserRepository {
         &self,
         user_filter: UserFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<Vec<User>> {
+    ) -> anyhow::Result<(Vec<User>, ItemCount)> {
+        // find users
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
@@ -96,21 +122,7 @@ impl IUserRepository for UserRepository {
         );
 
         // build conditions
-        let mut first = true;
-        let mut push_condition = |qb: &mut QueryBuilder<'_, sqlx::Postgres>| {
-            if first {
-                qb.push(" WHERE ");
-                first = false;
-            } else {
-                qb.push(" AND ");
-            }
-        };
-
-        if let Some(name_contains) = user_filter.name_contains {
-            push_condition(&mut qb);
-            qb.push("name ILIKE ")
-                .push_bind(format!("%{}%", name_contains));
-        }
+        let has_condition = self.push_user_condition(&mut qb, &user_filter);
 
         if let Some(cursor) = pagination.cursor {
             // get the id of the user with the given public_id
@@ -123,15 +135,13 @@ impl IUserRepository for UserRepository {
             .fetch_optional(&self.pool)
             .await?;
 
-            match cid_option {
-                Some(cid) => {
-                    push_condition(&mut qb);
-                    qb.push("id < ").push_bind(cid);
-                }
-                None => {
-                    return Ok(Vec::new());
-                }
+            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
+            if has_condition {
+                qb.push(" AND ");
+            } else {
+                qb.push(" WHERE ");
             }
+            qb.push("id < ").push_bind(cid);
         }
 
         qb.push(" ORDER BY id DESC LIMIT ")
@@ -139,7 +149,21 @@ impl IUserRepository for UserRepository {
 
         let users = qb.build_query_as::<User>().fetch_all(&self.pool).await?;
 
-        Ok(users)
+        // count total users
+        let mut qb = QueryBuilder::new(
+            r#"
+            SELECT COUNT(*) FROM users
+            "#,
+        );
+        // build conditions
+        self.push_user_condition(&mut qb, &user_filter);
+
+        let total = qb
+            .build_query_as::<ItemCount>()
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok((users, total))
     }
 
     async fn find(&self, user_id: Uuid) -> anyhow::Result<User> {

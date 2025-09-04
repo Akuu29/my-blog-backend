@@ -29,11 +29,3 @@ pub struct UpdateCategory {
     #[validate(length(min = 1, max = 20, message = "category length must be 1 to 20"))]
     pub name: String,
 }
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CategoryFilter {
-    #[serde(rename = "id")]
-    pub public_id: Option<Uuid>,
-    pub name: Option<String>,
-}

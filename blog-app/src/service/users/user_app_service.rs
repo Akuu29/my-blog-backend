@@ -1,5 +1,5 @@
 use blog_domain::model::{
-    common::pagination::Pagination,
+    common::{item_count::ItemCount, pagination::Pagination},
     users::{
         i_user_repository::{IUserRepository, UserFilter},
         user::{NewUser, UpdateUser, User},
@@ -24,7 +24,7 @@ impl<T: IUserRepository> UserAppService<T> {
         &self,
         user_filter: UserFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<Vec<User>> {
+    ) -> anyhow::Result<(Vec<User>, ItemCount)> {
         self.repository.all(user_filter, pagination).await
     }
 

@@ -7,7 +7,7 @@ use blog_domain::model::{
         article::{Article, NewArticle, UpdateArticle},
         i_article_repository::{ArticleFilter, IArticleRepository},
     },
-    common::pagination::Pagination,
+    common::{item_count::ItemCount, pagination::Pagination},
     tags::i_tag_repository::ITagRepository,
 };
 use sqlx::types::Uuid;
@@ -57,7 +57,7 @@ where
         &self,
         article_filter: ArticleFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<Vec<Article>> {
+    ) -> anyhow::Result<(Vec<Article>, ItemCount)> {
         self.article_repository
             .all(article_filter, pagination)
             .await

@@ -1,5 +1,7 @@
-use crate::model::articles::article::{Article, ArticleStatus, NewArticle, UpdateArticle};
-use crate::model::common::pagination::Pagination;
+use crate::model::{
+    articles::article::{Article, ArticleStatus, NewArticle, UpdateArticle},
+    common::{item_count::ItemCount, pagination::Pagination},
+};
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_with::{DisplayFromStr, serde_as};
@@ -22,22 +24,6 @@ pub struct ArticleFilter {
     pub title_contains: Option<String>,
 }
 
-impl ArticleFilter {
-    pub fn new(
-        user_id: Option<Uuid>,
-        status: Option<ArticleStatus>,
-        category_public_id: Option<Uuid>,
-        title_contains: Option<String>,
-    ) -> Self {
-        Self {
-            user_id,
-            status,
-            category_public_id,
-            title_contains,
-        }
-    }
-}
-
 #[async_trait]
 pub trait IArticleRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
     async fn create(&self, user_id: Uuid, new_article: NewArticle) -> anyhow::Result<Article>;
@@ -50,7 +36,7 @@ pub trait IArticleRepository: Clone + std::marker::Send + std::marker::Sync + 's
         &self,
         article_filter: ArticleFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<Vec<Article>>;
+    ) -> anyhow::Result<(Vec<Article>, ItemCount)>;
     async fn update(
         &self,
         article_id: Uuid,

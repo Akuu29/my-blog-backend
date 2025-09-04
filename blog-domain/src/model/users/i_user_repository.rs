@@ -1,5 +1,5 @@
 use crate::model::{
-    common::pagination::Pagination,
+    common::{item_count::ItemCount, pagination::Pagination},
     users::user::{NewUser, UpdateUser, User},
 };
 use async_trait::async_trait;
@@ -24,7 +24,7 @@ pub trait IUserRepository: Clone + std::marker::Send + std::marker::Sync + 'stat
         &self,
         user_filter: UserFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<Vec<User>>;
+    ) -> anyhow::Result<(Vec<User>, ItemCount)>;
     async fn find(&self, user_id: Uuid) -> anyhow::Result<User>;
     async fn find_by_user_identity(
         &self,

@@ -4,7 +4,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 #[serde_as]
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct Pagination {
     #[serde_as(as = "Option<DisplayFromStr>")]
