@@ -78,6 +78,11 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
         // build conditions
         self.push_article_condition(&mut qb, &filter);
 
+        /*
+        build paginated conditions.
+        cursor, offset can only be used once,
+        because each is validated to prevent conflicts.
+        */
         if let Some(cursor) = pagination.cursor {
             // get the id of the article with the given public_id
             let cid_option = sqlx::query_scalar!(
@@ -93,8 +98,13 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
             qb.push(" AND a.id < ").push_bind(cid);
         }
 
-        qb.push(" ORDER BY a.id DESC LIMIT ")
-            .push_bind(pagination.per_page);
+        qb.push(" ORDER BY a.id DESC");
+
+        if let Some(offset) = pagination.offset {
+            qb.push(" OFFSET ").push_bind(offset);
+        }
+
+        qb.push(" LIMIT ").push_bind(pagination.per_page);
 
         let articles = qb.build_query_as::<Article>().fetch_all(&self.pool).await?;
 

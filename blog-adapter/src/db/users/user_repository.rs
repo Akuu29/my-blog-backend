@@ -124,6 +124,11 @@ impl IUserRepository for UserRepository {
         // build conditions
         let has_condition = self.push_user_condition(&mut qb, &user_filter);
 
+        /*
+        build paginated conditions.
+        cursor, offset can only be used once,
+        because each is validated to prevent conflicts.
+        */
         if let Some(cursor) = pagination.cursor {
             // get the id of the user with the given public_id
             let cid_option = sqlx::query_scalar!(
@@ -144,8 +149,13 @@ impl IUserRepository for UserRepository {
             qb.push("id < ").push_bind(cid);
         }
 
-        qb.push(" ORDER BY id DESC LIMIT ")
-            .push_bind(pagination.per_page);
+        qb.push(" ORDER BY id DESC");
+
+        if let Some(offset) = pagination.offset {
+            qb.push(" OFFSET ").push_bind(offset);
+        }
+
+        qb.push(" LIMIT ").push_bind(pagination.per_page);
 
         let users = qb.build_query_as::<User>().fetch_all(&self.pool).await?;
 

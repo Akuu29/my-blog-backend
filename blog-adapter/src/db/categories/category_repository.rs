@@ -105,6 +105,11 @@ impl ICategoryRepository for CategoryRepository {
         // build conditions
         let has_condition = self.push_category_condition(&mut qb, &category_filter);
 
+        /*
+        build paginated conditions.
+        cursor, offset can only be used once,
+        because each is validated to prevent conflicts.
+        */
         if let Some(cursor) = pagination.cursor {
             let cid_option = sqlx::query_scalar!(
                 r#"
@@ -124,8 +129,13 @@ impl ICategoryRepository for CategoryRepository {
             qb.push("c.id < ").push_bind(cid);
         }
 
-        qb.push(" ORDER BY c.id DESC LIMIT ")
-            .push_bind(pagination.per_page);
+        qb.push(" ORDER BY c.id DESC");
+
+        if let Some(offset) = pagination.offset {
+            qb.push(" OFFSET ").push_bind(offset);
+        }
+
+        qb.push(" LIMIT ").push_bind(pagination.per_page);
 
         let categories = qb
             .build_query_as::<Category>()
