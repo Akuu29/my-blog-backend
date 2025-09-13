@@ -44,14 +44,11 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
             WITH tag_ids AS (
                 SELECT id
                 FROM tags
-                WHERE public_id IN (
+                WHERE public_id = ANY(
             "#,
         );
-        let mut separated = qb.separated(",");
-        for tag_id in filter.tag_ids.iter() {
-            separated.push_bind(tag_id);
-        }
-        separated.push_unseparated(") ");
+        qb.push_bind(&filter.tag_ids);
+        qb.push(") ");
 
         qb.push(
             r#"
@@ -114,14 +111,11 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
             WITH tag_ids AS (
                 SELECT id
                 FROM tags
-                WHERE public_id IN (
+                WHERE public_id = ANY(
             "#,
         );
-        let mut separated = qb.separated(",");
-        for tag_id in filter.tag_ids.iter() {
-            separated.push_bind(tag_id);
-        }
-        separated.push_unseparated(") ");
+        qb.push_bind(&filter.tag_ids);
+        qb.push(") ");
 
         qb.push(
             r#"
