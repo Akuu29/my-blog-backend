@@ -4,11 +4,12 @@ use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 #[serde_as]
-#[derive(Debug, Clone, Default, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate)]
 #[validate(schema(function = "validate_pagination"))]
 #[serde(rename_all = "camelCase")]
 pub struct Pagination {
     #[serde_as(as = "Option<DisplayFromStr>")]
+    #[validate(range(min = 0, message = "offset must be greater than or equal to 0"))]
     pub offset: Option<i32>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub cursor: Option<Uuid>,
@@ -16,6 +17,16 @@ pub struct Pagination {
     #[serde(default = "default_per_page")]
     #[validate(range(min = 1, max = 100, message = "per_page must be between 1 and 100"))]
     pub per_page: i32,
+}
+
+impl Default for Pagination {
+    fn default() -> Self {
+        Self {
+            offset: None,
+            cursor: None,
+            per_page: default_per_page(),
+        }
+    }
 }
 
 fn default_per_page() -> i32 {

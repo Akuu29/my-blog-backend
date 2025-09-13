@@ -27,11 +27,11 @@ where
 
         let unique_tag_ids = tag_ids.into_iter().collect::<HashSet<Uuid>>();
         let tag_filter = TagFilter::new(None, Some(unique_tag_ids.iter().copied().collect()));
-        let (tags, _) = self
+        let (_, total) = self
             .repository
             .all(tag_filter, Pagination::default())
             .await?;
 
-        Ok(tags.len() == unique_tag_ids.len())
+        Ok(total.value() as usize == unique_tag_ids.len())
     }
 }
