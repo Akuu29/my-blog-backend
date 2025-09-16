@@ -7,7 +7,8 @@ use std::{fmt, str::FromStr};
 use uuid::Uuid;
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[serde(rename_all = "lowercase")]
 #[sqlx(type_name = "article_status", rename_all = "lowercase")]
 pub enum ArticleStatus {
     Draft,

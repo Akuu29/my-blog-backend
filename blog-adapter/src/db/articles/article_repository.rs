@@ -5,7 +5,7 @@ use blog_domain::model::{
         article::{Article, NewArticle, UpdateArticle},
         i_article_repository::{ArticleFilter, IArticleRepository},
     },
-    common::pagination::Pagination,
+    common::{item_count::ItemCount, pagination::Pagination},
 };
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -18,6 +18,46 @@ pub struct ArticleRepository {
 impl ArticleRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
+    }
+
+    /// push article where conditions to the query builder
+    fn push_article_condition(
+        &self,
+        qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>,
+        filter: &ArticleFilter,
+    ) -> bool {
+        let mut has_condition = false;
+        let mut push_condition = |qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>| {
+            if !has_condition {
+                qb.push(" WHERE ");
+                has_condition = true;
+            } else {
+                qb.push(" AND ");
+            }
+        };
+
+        if let Some(user_id) = filter.user_id {
+            push_condition(qb);
+            qb.push("u.public_id = ").push_bind(user_id);
+        }
+
+        if let Some(status) = filter.status {
+            push_condition(qb);
+            qb.push("a.status = ").push_bind(status);
+        }
+
+        if let Some(category_public_id) = filter.category_public_id {
+            push_condition(qb);
+            qb.push("c.public_id = ").push_bind(category_public_id);
+        }
+
+        if let Some(title_contains) = filter.title_contains.clone() {
+            push_condition(qb);
+            qb.push("a.title ILIKE ")
+                .push_bind(format!("%{}%", title_contains));
+        }
+
+        return has_condition;
     }
 }
 
@@ -116,7 +156,8 @@ impl IArticleRepository for ArticleRepository {
         &self,
         article_filter: ArticleFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<Vec<Article>> {
+    ) -> anyhow::Result<(Vec<Article>, ItemCount)> {
+        // find articles
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
@@ -129,41 +170,20 @@ impl IArticleRepository for ArticleRepository {
                 a.updated_at
             FROM articles AS a
             LEFT JOIN categories AS c ON a.category_id = c.id
+            LEFT JOIN users AS u ON a.user_id = u.id
             "#,
         );
 
-        let mut first = true;
-        let mut push_condition = |qb: &mut QueryBuilder<'_, sqlx::Postgres>| {
-            if first {
-                qb.push(" WHERE ");
-                first = false;
-            } else {
-                qb.push(" AND ");
-            }
-        };
+        // build conditions
+        let has_condition = self.push_article_condition(&mut qb, &article_filter);
 
-        if let Some(user_id) = article_filter.user_id {
-            push_condition(&mut qb);
-            qb.push("user_id = ").push_bind(user_id);
-        }
-
-        if let Some(status) = article_filter.status {
-            push_condition(&mut qb);
-            qb.push("status = ").push_bind(status);
-        }
-
-        if let Some(category_public_id) = article_filter.category_public_id {
-            push_condition(&mut qb);
-            qb.push("c.public_id = ").push_bind(category_public_id);
-        }
-
-        if let Some(title_contains) = article_filter.title_contains {
-            push_condition(&mut qb);
-            qb.push("a.title ILIKE ")
-                .push_bind(format!("%{}%", title_contains));
-        }
-
+        /*
+        build paginated conditions.
+        cursor, offset can only be used once,
+        because each is validated to prevent conflicts.
+        */
         if let Some(cursor) = pagination.cursor {
+            // get the id of the article with the given public_id
             let cid_option = sqlx::query_scalar!(
                 r#"
                 SELECT id FROM articles WHERE public_id = $1
@@ -173,23 +193,44 @@ impl IArticleRepository for ArticleRepository {
             .fetch_optional(&self.pool)
             .await?;
 
-            match cid_option {
-                Some(cid) => {
-                    push_condition(&mut qb);
-                    qb.push("a.id < ").push_bind(cid);
-                }
-                None => {
-                    return Ok(Vec::new());
-                }
+            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
+            if has_condition {
+                qb.push(" AND ");
+            } else {
+                qb.push(" WHERE ");
             }
+            qb.push("a.id < ").push_bind(cid);
         }
 
-        qb.push(" ORDER BY a.id DESC LIMIT ")
-            .push_bind(pagination.per_page);
+        qb.push(" ORDER BY a.id DESC");
+
+        if let Some(offset) = pagination.offset {
+            qb.push(" OFFSET ").push_bind(offset);
+        }
+
+        qb.push(" LIMIT ").push_bind(pagination.per_page);
 
         let articles = qb.build_query_as::<Article>().fetch_all(&self.pool).await?;
 
-        Ok(articles)
+        // count total articles
+        let mut qb = QueryBuilder::new(
+            r#"
+            SELECT
+                COUNT(*)
+            FROM articles AS a
+            LEFT JOIN categories AS c ON a.category_id = c.id
+            LEFT JOIN users AS u ON a.user_id = u.id
+            "#,
+        );
+        // build conditions
+        self.push_article_condition(&mut qb, &article_filter);
+
+        let total = qb
+            .build_query_as::<ItemCount>()
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok((articles, total))
     }
 
     async fn update(

@@ -23,14 +23,11 @@ use blog_domain::model::{
         article::{NewArticle, UpdateArticle},
         i_article_repository::{ArticleFilter, IArticleRepository},
     },
-    common::pagination::Pagination,
     tags::i_tag_repository::ITagRepository,
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
-use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
-use validator::Validate;
 
 #[tracing::instrument(
     name = "create_article",
@@ -103,16 +100,24 @@ where
     T: IArticleRepository,
     U: ITagRepository,
 {
-    let articles = article_app_service
-        .all(param.filter, param.pagination)
+    let mut pagination = param.pagination;
+    // To check if there is a next page
+    pagination.per_page += 1;
+
+    let (mut articles, total) = article_app_service
+        .all(param.filter, pagination.clone())
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
             app_err.handle_error("Failed to get all articles")
         })?;
 
+    let has_next = articles.len() == pagination.per_page as usize;
+    if has_next {
+        articles.pop();
+    }
     let next_cursor = articles.last().map(|article| article.public_id).or(None);
-    let paged_body = PagedBody::new(articles, next_cursor);
+    let paged_body = PagedBody::new(articles, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -230,43 +235,35 @@ where
     Ok(ApiResponse::<()>::new(StatusCode::OK, None, None))
 }
 
-#[derive(Debug, Deserialize, Validate)]
-pub struct FindArticlesByTagQueryParam {
-    #[serde(flatten)]
-    #[validate(nested)]
-    pub filter: ArticlesByTagFilter,
-    #[serde(flatten)]
-    #[validate(nested)]
-    pub pagination: Pagination,
-}
-
-impl std::fmt::Display for FindArticlesByTagQueryParam {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 #[tracing::instrument(name = "find_articles_by_tag", skip(articles_by_tag_query_service))]
 pub async fn find_articles_by_tag<T>(
     Extension(articles_by_tag_query_service): Extension<Arc<T>>,
-    ValidatedQueryParam(query_param): ValidatedQueryParam<FindArticlesByTagQueryParam>,
+    ValidatedQueryParam(query_param): ValidatedQueryParam<
+        PagedFilterQueryParam<ArticlesByTagFilter>,
+    >,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: IArticlesByTagQueryService,
 {
     let filter = query_param.filter;
-    let pagination = query_param.pagination;
+    let mut pagination = query_param.pagination;
+    // To check if there is a next page
+    pagination.per_page += 1;
 
-    let articles = articles_by_tag_query_service
-        .find_article_title_by_tag(filter, pagination)
+    let (mut articles, total) = articles_by_tag_query_service
+        .find_article_title_by_tag(filter, pagination.clone())
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
             app_err.handle_error("Failed to find articles by tag")
         })?;
 
+    let has_next = articles.len() == pagination.per_page as usize;
+    if has_next {
+        articles.pop();
+    }
     let next_cursor = articles.last().map(|article| article.public_id).or(None);
-    let paged_body = PagedBody::new(articles, next_cursor);
+    let paged_body = PagedBody::new(articles, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(
         StatusCode::OK,

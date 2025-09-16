@@ -1,6 +1,9 @@
-use blog_domain::model::categories::{
-    category::{Category, CategoryFilter, NewCategory, UpdateCategory},
-    i_category_repository::ICategoryRepository,
+use blog_domain::model::{
+    categories::{
+        category::{Category, NewCategory, UpdateCategory},
+        i_category_repository::{CategoryFilter, ICategoryRepository},
+    },
+    common::{item_count::ItemCount, pagination::Pagination},
 };
 use uuid::Uuid;
 
@@ -17,8 +20,12 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
         self.repository.create(user_id, payload).await
     }
 
-    pub async fn all(&self, category_filter: CategoryFilter) -> anyhow::Result<Vec<Category>> {
-        self.repository.all(category_filter).await
+    pub async fn all(
+        &self,
+        category_filter: CategoryFilter,
+        pagination: Pagination,
+    ) -> anyhow::Result<(Vec<Category>, ItemCount)> {
+        self.repository.all(category_filter, pagination).await
     }
 
     pub async fn update(

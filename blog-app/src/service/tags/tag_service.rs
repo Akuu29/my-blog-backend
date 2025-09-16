@@ -1,4 +1,7 @@
-use blog_domain::model::tags::i_tag_repository::{ITagRepository, TagFilter};
+use blog_domain::model::{
+    common::pagination::Pagination,
+    tags::i_tag_repository::{ITagRepository, TagFilter},
+};
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -23,12 +26,12 @@ where
         }
 
         let unique_tag_ids = tag_ids.into_iter().collect::<HashSet<Uuid>>();
-        let tag_filter = TagFilter {
-            tag_ids: Some(unique_tag_ids.iter().copied().collect()),
-            ..Default::default()
-        };
-        let tags = self.repository.all(tag_filter).await?;
+        let tag_filter = TagFilter::new(None, Some(unique_tag_ids.iter().copied().collect()));
+        let (_, total) = self
+            .repository
+            .all(tag_filter, Pagination::default())
+            .await?;
 
-        Ok(tags.len() == unique_tag_ids.len())
+        Ok(total.value() as usize == unique_tag_ids.len())
     }
 }

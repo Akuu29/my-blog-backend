@@ -206,16 +206,25 @@ pub async fn all<T>(
 where
     T: IUserRepository,
 {
-    let users = user_app_service
-        .all(param.filter, param.pagination)
+    let mut pagination = param.pagination;
+    // To check if there is a next page
+    pagination.per_page += 1;
+
+    let (mut users, total) = user_app_service
+        .all(param.filter, pagination.clone())
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
             app_err.handle_error("Failed to get users")
         })?;
 
+    let has_next = users.len() == pagination.per_page as usize;
+    if has_next {
+        users.pop();
+    }
+
     let next_cursor = users.last().map(|user| user.public_id).or(None);
-    let paged_body = PagedBody::new(users, next_cursor);
+    let paged_body = PagedBody::new(users, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(
         StatusCode::OK,

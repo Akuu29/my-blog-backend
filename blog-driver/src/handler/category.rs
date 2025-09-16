@@ -1,9 +1,13 @@
 use crate::{
-    model::{api_response::ApiResponse, auth_token::AuthToken, validated_json::ValidatedJson},
+    model::{
+        api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
+        paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
+        validated_query_param::ValidatedQueryParam,
+    },
     utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
-    extract::{Extension, Path, Query},
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -13,8 +17,8 @@ use blog_app::service::{
 };
 use blog_domain::model::{
     categories::{
-        category::{CategoryFilter, NewCategory, UpdateCategory},
-        i_category_repository::ICategoryRepository,
+        category::{NewCategory, UpdateCategory},
+        i_category_repository::{CategoryFilter, ICategoryRepository},
     },
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
@@ -61,22 +65,36 @@ where
 #[tracing::instrument(name = "get_all_categories", skip(category_app_service))]
 pub async fn all_categories<T>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
-    Query(category_filter): Query<CategoryFilter>,
+    ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<CategoryFilter>>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ICategoryRepository,
 {
-    let categories = category_app_service
-        .all(category_filter)
+    let mut pagination = param.pagination;
+    // To check if there is a next page
+    pagination.per_page += 1;
+
+    let (mut categories, total) = category_app_service
+        .all(param.filter, pagination.clone())
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
             app_err.handle_error("Failed to get all categories")
         })?;
 
+    let has_next = categories.len() == pagination.per_page as usize;
+    if has_next {
+        categories.pop();
+    }
+    let next_cursor = categories
+        .last()
+        .map(|category| category.public_id)
+        .or(None);
+    let paged_body = PagedBody::new(categories, next_cursor, has_next, total.value());
+
     Ok(ApiResponse::new(
         StatusCode::OK,
-        Some(serde_json::to_string(&categories).unwrap()),
+        Some(serde_json::to_string(&paged_body).unwrap()),
         None,
     ))
 }
