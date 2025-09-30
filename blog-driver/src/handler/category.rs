@@ -1,27 +1,29 @@
 use crate::{
-    model::{api_response::ApiResponse, auth_token::AuthToken, validated_json::ValidatedJson},
+    model::{
+        api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
+        paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
+        validated_query_param::ValidatedQueryParam,
+    },
     utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
-    extract::{Extension, Path, Query},
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
 };
-use blog_app::{
-    query_service::articles_by_category::i_articles_by_category_query_service::IArticlesByCategoryQueryService,
-    service::{
-        categories::category_app_service::CategoryAppService,
-        tokens::token_app_service::TokenAppService,
-    },
+use blog_app::service::{
+    categories::category_app_service::CategoryAppService,
+    tokens::token_app_service::TokenAppService,
 };
 use blog_domain::model::{
     categories::{
-        category::{CategoryFilter, NewCategory, UpdateCategory},
-        i_category_repository::ICategoryRepository,
+        category::{NewCategory, UpdateCategory},
+        i_category_repository::{CategoryFilter, ICategoryRepository},
     },
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[tracing::instrument(
     name = "create_category",
@@ -63,22 +65,36 @@ where
 #[tracing::instrument(name = "get_all_categories", skip(category_app_service))]
 pub async fn all_categories<T>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
-    Query(category_filter): Query<CategoryFilter>,
+    ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<CategoryFilter>>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ICategoryRepository,
 {
-    let categories = category_app_service
-        .all(category_filter)
+    let mut pagination = param.pagination;
+    // To check if there is a next page
+    pagination.per_page += 1;
+
+    let (mut categories, total) = category_app_service
+        .all(param.filter, pagination.clone())
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
             app_err.handle_error("Failed to get all categories")
         })?;
 
+    let has_next = categories.len() == pagination.per_page as usize;
+    if has_next {
+        categories.pop();
+    }
+    let next_cursor = categories
+        .last()
+        .map(|category| category.public_id)
+        .or(None);
+    let paged_body = PagedBody::new(categories, next_cursor, has_next, total.value());
+
     Ok(ApiResponse::new(
         StatusCode::OK,
-        Some(serde_json::to_string(&categories).unwrap()),
+        Some(serde_json::to_string(&paged_body).unwrap()),
         None,
     ))
 }
@@ -91,7 +107,7 @@ pub async fn update_category<T, U>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
-    Path(category_id): Path<i32>,
+    Path(category_id): Path<Uuid>,
     ValidatedJson(payload): ValidatedJson<UpdateCategory>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
@@ -129,7 +145,7 @@ pub async fn delete_category<T, U>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
-    Path(category_id): Path<i32>,
+    Path(category_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ICategoryRepository,
@@ -152,30 +168,4 @@ where
         })?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
-}
-
-#[tracing::instrument(
-    name = "find_articles_by_category",
-    skip(articles_by_category_query_service)
-)]
-pub async fn find_articles_by_category<T>(
-    Extension(articles_by_category_query_service): Extension<Arc<T>>,
-    Path(category_name): Path<String>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
-where
-    T: IArticlesByCategoryQueryService,
-{
-    let articles_by_category = articles_by_category_query_service
-        .find_article_title_by_category(category_name)
-        .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to find articles by category")
-        })?;
-
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&articles_by_category).unwrap()),
-        None,
-    ))
 }

@@ -1,72 +1,234 @@
 use crate::{
     model::{
-        api_response::ApiResponse,
-        auth_token::AuthToken,
-        error_message::{ErrorMessage, ErrorMessageKind},
-        validated_json::ValidatedJson,
+        api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
+        paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
+        validated_query_param::ValidatedQueryParam,
     },
-    utils::{app_error::AppError, error_handler::ErrorHandler, error_log_kind::ErrorLogKind},
+    service::cookie_service::CookieService,
+    utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
 };
+use axum_extra::extract::cookie::PrivateCookieJar;
+use blog_adapter::utils::repository_error::RepositoryError;
 use blog_app::service::{
     tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
 };
 use blog_domain::model::{
-    tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
+    tokens::{
+        i_token_repository::ITokenRepository, token::ApiCredentials, token_string::IdTokenString,
+    },
     users::{
-        i_user_repository::IUserRepository,
-        user::{NewUser, UpdateUser, UserRole},
+        i_user_repository::{IUserRepository, UserFilter},
+        user::{NewUser, UpdateUser},
     },
 };
 use sqlx::types::Uuid;
-use std::sync::Arc;
+use std::{sync::Arc, time};
 
-#[tracing::instrument(name = "create_user", skip(user_app_service, token_app_service, token))]
-pub async fn create<T, U>(
-    Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
-    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
-    AuthToken(token): AuthToken<AccessTokenString>,
-    ValidatedJson(payload): ValidatedJson<NewUser>,
+#[tracing::instrument(
+    name = "sign_up",
+    skip(token_app_service, user_app_service, cookie_service, token, jar)
+)]
+pub async fn sign_up<T, U>(
+    Extension(token_app_service): Extension<Arc<TokenAppService<T>>>,
+    Extension(user_app_service): Extension<Arc<UserAppService<U>>>,
+    Extension(cookie_service): Extension<Arc<CookieService>>,
+    AuthToken(token): AuthToken<IdTokenString>,
+    jar: PrivateCookieJar,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
-    T: IUserRepository,
-    U: ITokenRepository,
+    T: ITokenRepository,
+    U: IUserRepository,
 {
-    let access_token_data = token_app_service
-        .verify_access_token(token)
+    let start_time = time::Instant::now();
+
+    let id_token_data = token_app_service
+        .verify_id_token(token)
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
+            app_err.handle_error("Failed to sign up")
         })?;
 
-    if access_token_data.claims.role != UserRole::Admin {
-        let err_log_msg = "User is not permitted to create user";
-        tracing::error!(error.kind=%ErrorLogKind::Authorization, error.message=%err_log_msg);
+    let id_token_claims = id_token_data.claims;
 
-        let err_msg = ErrorMessage::new(
-            ErrorMessageKind::Forbidden,
-            "User is not permitted to create user".to_string(),
-        );
-        return Err(ApiResponse::new(
-            StatusCode::FORBIDDEN,
-            Some(serde_json::to_string(&err_msg).unwrap()),
-            None,
-        ));
+    let provider_name = id_token_claims.provider_name().map_err(|e| {
+        let app_err = AppError::from(e);
+        app_err.handle_error("Failed to sign up")
+    })?;
+    let exists_user = user_app_service
+        .find_by_user_identity(&provider_name, &id_token_claims.sub())
+        .await;
+
+    let response = match exists_user {
+        Ok(_) => {
+            let app_err = AppError::Unexpected("User already exists".to_string());
+            Err(app_err.handle_error("Failed to sign up"))
+        }
+        Err(e) => match e.downcast_ref::<RepositoryError>() {
+            Some(RepositoryError::NotFound) => {
+                let new_user = NewUser::new(
+                    &provider_name,
+                    &id_token_claims.sub(),
+                    &id_token_claims.email(),
+                    id_token_claims.email_verified(),
+                );
+                let user = user_app_service.create(new_user).await.map_err(|e| {
+                    let app_err = AppError::from(e);
+                    app_err.handle_error("Failed to sign up")
+                })?;
+
+                let access_token = token_app_service
+                    .generate_access_token(&user)
+                    .map_err(|e| {
+                        let app_err = AppError::from(e);
+                        app_err.handle_error("Failed to sign up")
+                    })?;
+
+                let api_credentials = ApiCredentials::new(&access_token);
+
+                let refresh_token =
+                    token_app_service
+                        .generate_refresh_token(&user)
+                        .map_err(|e| {
+                            let app_err = AppError::from(e);
+                            app_err.handle_error("Failed to sign up")
+                        })?;
+                let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
+                let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
+
+                Ok(ApiResponse::new(
+                    StatusCode::OK,
+                    Some(serde_json::to_string(&api_credentials).unwrap()),
+                    Some(updated_jar),
+                ))
+            }
+            _ => {
+                let app_err = AppError::from(e);
+                Err(app_err.handle_error("Failed to sign up"))
+            }
+        },
     };
 
-    let user = user_app_service.create(payload).await.map_err(|e| {
+    let min_duration = time::Duration::from_millis(1000);
+    let elapsed = start_time.elapsed();
+    if elapsed < min_duration {
+        tokio::time::sleep(min_duration - elapsed).await;
+    }
+
+    response
+}
+
+#[tracing::instrument(
+    name = "sign_in",
+    skip(token_app_service, user_app_service, cookie_service, token, jar)
+)]
+pub async fn sign_in<T, U>(
+    Extension(token_app_service): Extension<Arc<TokenAppService<T>>>,
+    Extension(user_app_service): Extension<Arc<UserAppService<U>>>,
+    Extension(cookie_service): Extension<Arc<CookieService>>,
+    AuthToken(token): AuthToken<IdTokenString>,
+    jar: PrivateCookieJar,
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: ITokenRepository,
+    U: IUserRepository,
+{
+    let start_time = time::Instant::now();
+
+    let id_token_data = token_app_service
+        .verify_id_token(token)
+        .await
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to sign in")
+        })?;
+
+    let id_token_claims = id_token_data.claims;
+
+    let provider_name = id_token_claims.provider_name().map_err(|e| {
         let app_err = AppError::from(e);
-        app_err.handle_error("Failed to create user")
+        app_err.handle_error("Failed to sign in")
     })?;
 
+    let exists_user = user_app_service
+        .find_by_user_identity(&provider_name, &id_token_claims.sub())
+        .await;
+
+    let response = match exists_user {
+        Ok(user) => {
+            let access_token = token_app_service
+                .generate_access_token(&user)
+                .map_err(|e| {
+                    let app_err = AppError::from(e);
+                    app_err.handle_error("Failed to sign in")
+                })?;
+            let api_credentials = ApiCredentials::new(&access_token);
+
+            let refresh_token = token_app_service
+                .generate_refresh_token(&user)
+                .map_err(|e| {
+                    let app_err = AppError::from(e);
+                    app_err.handle_error("Failed to sign in")
+                })?;
+            let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
+            let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
+
+            Ok(ApiResponse::new(
+                StatusCode::OK,
+                Some(serde_json::to_string(&api_credentials).unwrap()),
+                Some(updated_jar),
+            ))
+        }
+        Err(e) => {
+            let app_err = AppError::from(e);
+            Err(app_err.handle_error("Failed to sign in"))
+        }
+    };
+
+    let min_duration = time::Duration::from_millis(1000);
+    let elapsed = start_time.elapsed();
+    if elapsed < min_duration {
+        tokio::time::sleep(min_duration - elapsed).await;
+    }
+
+    response
+}
+
+pub async fn all<T>(
+    Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+    ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<UserFilter>>,
+) -> Result<impl IntoResponse, ApiResponse<String>>
+where
+    T: IUserRepository,
+{
+    let mut pagination = param.pagination;
+    // To check if there is a next page
+    pagination.per_page += 1;
+
+    let (mut users, total) = user_app_service
+        .all(param.filter, pagination.clone())
+        .await
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to get users")
+        })?;
+
+    let has_next = users.len() == pagination.per_page as usize;
+    if has_next {
+        users.pop();
+    }
+
+    let next_cursor = users.last().map(|user| user.public_id).or(None);
+    let paged_body = PagedBody::new(users, next_cursor, has_next, total.value());
+
     Ok(ApiResponse::new(
-        StatusCode::CREATED,
-        Some(serde_json::to_string(&user).unwrap()),
+        StatusCode::OK,
+        Some(serde_json::to_string(&paged_body).unwrap()),
         None,
     ))
 }

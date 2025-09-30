@@ -1,10 +1,14 @@
 use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::model::tags::{
-    i_tag_repository::{ITagRepository, TagFilter},
-    tag::{NewTag, Tag},
+use blog_domain::model::{
+    common::{item_count::ItemCount, pagination::Pagination},
+    tags::{
+        i_tag_repository::{ITagRepository, TagFilter},
+        tag::{NewTag, Tag},
+    },
 };
-use sqlx::{types::Uuid, QueryBuilder};
+use sqlx::QueryBuilder;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct TagRepository {
@@ -14,6 +18,35 @@ pub struct TagRepository {
 impl TagRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
+    }
+
+    /// push tag where conditions to the query builder
+    fn push_tag_condition(
+        &self,
+        qb: &mut QueryBuilder<'_, sqlx::Postgres>,
+        filter: &TagFilter,
+    ) -> bool {
+        let mut has_condition = false;
+        let mut push_condition = |qb: &mut QueryBuilder<'_, sqlx::Postgres>| {
+            if !has_condition {
+                qb.push(" WHERE ");
+                has_condition = true;
+            } else {
+                qb.push(" AND ");
+            }
+        };
+
+        if let Some(user_id) = filter.user_id {
+            push_condition(qb);
+            qb.push("u.public_id = ").push_bind(user_id);
+        }
+
+        if let Some(tag_ids) = filter.tag_ids.clone() {
+            push_condition(qb);
+            qb.push("t.public_id = ANY(").push_bind(tag_ids).push(")");
+        }
+
+        return has_condition;
     }
 }
 
@@ -28,9 +61,14 @@ impl ITagRepository for TagRepository {
             )
             VALUES (
                 $1,
-                $2
+                (SELECT id FROM users WHERE public_id = $2)
             )
-            RETURNING *;
+            RETURNING
+                public_id,
+                name,
+                created_at,
+                updated_at
+            ;
             "#,
         )
         .bind(payload.name)
@@ -40,47 +78,89 @@ impl ITagRepository for TagRepository {
 
         Ok(tag)
     }
-    async fn all(&self, tag_filter: TagFilter) -> anyhow::Result<Vec<Tag>> {
-        let mut query = QueryBuilder::new(
+
+    async fn all(
+        &self,
+        tag_filter: TagFilter,
+        pagination: Pagination,
+    ) -> anyhow::Result<(Vec<Tag>, ItemCount)> {
+        // find tags
+        let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                id,
-                name,
-                created_at,
-                updated_at
-            FROM tags
+                t.public_id,
+                t.name,
+                t.created_at,
+                t.updated_at
+            FROM tags AS t
+            LEFT JOIN users AS u
+            ON t.user_id = u.id
             "#,
         );
 
-        let mut conditions = vec![];
+        // build conditions
+        let has_condition = self.push_tag_condition(&mut qb, &tag_filter);
 
-        if tag_filter.user_id.is_some() {
-            conditions.push("user_id = $1");
-        }
-
-        if tag_filter.tag_ids.is_some() {
-            conditions.push("id = ANY($2)");
-        }
-
-        if !conditions.is_empty() {
-            query.push(" WHERE ").push(conditions.join(" AND "));
-        }
-
-        query.push(" ORDER BY id DESC; ");
-        let tags = query
-            .build_query_as::<Tag>()
-            .bind(tag_filter.user_id)
-            .bind(tag_filter.tag_ids)
-            .fetch_all(&self.pool)
+        /*
+        build paginated conditions.
+        cursor, offset can only be used once,
+        because each is validated to prevent conflicts.
+        */
+        if let Some(cursor) = pagination.cursor {
+            let cid_option = sqlx::query_scalar!(
+                r#"
+                SELECT id FROM tags WHERE public_id = $1
+                "#,
+                cursor
+            )
+            .fetch_optional(&self.pool)
             .await?;
 
-        Ok(tags)
+            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
+            if has_condition {
+                qb.push(" AND ");
+            } else {
+                qb.push(" WHERE ");
+            }
+            qb.push("t.id < ").push_bind(cid);
+        }
+
+        qb.push(" ORDER BY t.id DESC");
+
+        if let Some(offset) = pagination.offset {
+            qb.push(" OFFSET ").push_bind(offset);
+        }
+
+        qb.push(" LIMIT ").push_bind(pagination.per_page);
+
+        let tags = qb.build_query_as::<Tag>().fetch_all(&self.pool).await?;
+
+        // count total tags
+        let mut qb = QueryBuilder::new(
+            r#"
+            SELECT
+                COUNT(*)
+            FROM tags AS t
+            LEFT JOIN users AS u ON t.user_id = u.id
+            "#,
+        );
+        // build conditions
+        self.push_tag_condition(&mut qb, &tag_filter);
+
+        let total = qb
+            .build_query_as::<ItemCount>()
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok((tags, total))
     }
-    async fn delete(&self, tag_id: i32) -> anyhow::Result<()> {
+
+    async fn delete(&self, tag_id: Uuid) -> anyhow::Result<()> {
         sqlx::query(
             r#"
             DELETE FROM tags
-            WHERE id = $1;
+            WHERE public_id = $1
+            ;
             "#,
         )
         .bind(tag_id)

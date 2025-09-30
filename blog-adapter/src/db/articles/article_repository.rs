@@ -5,9 +5,10 @@ use blog_domain::model::{
         article::{Article, NewArticle, UpdateArticle},
         i_article_repository::{ArticleFilter, IArticleRepository},
     },
-    common::pagination::Pagination,
+    common::{item_count::ItemCount, pagination::Pagination},
 };
-use sqlx::{QueryBuilder, types::Uuid};
+use sqlx::QueryBuilder;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct ArticleRepository {
@@ -18,13 +19,59 @@ impl ArticleRepository {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
     }
+
+    /// push article where conditions to the query builder
+    fn push_article_condition(
+        &self,
+        qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>,
+        filter: &ArticleFilter,
+    ) -> bool {
+        let mut has_condition = false;
+        let mut push_condition = |qb: &mut sqlx::QueryBuilder<'_, sqlx::Postgres>| {
+            if !has_condition {
+                qb.push(" WHERE ");
+                has_condition = true;
+            } else {
+                qb.push(" AND ");
+            }
+        };
+
+        if let Some(user_id) = filter.user_id {
+            push_condition(qb);
+            qb.push("u.public_id = ").push_bind(user_id);
+        }
+
+        if let Some(status) = filter.status {
+            push_condition(qb);
+            qb.push("a.status = ").push_bind(status);
+        }
+
+        if let Some(category_public_id) = filter.category_public_id {
+            push_condition(qb);
+            qb.push("c.public_id = ").push_bind(category_public_id);
+        }
+
+        if let Some(title_contains) = filter.title_contains.clone() {
+            push_condition(qb);
+            qb.push("a.title ILIKE ")
+                .push_bind(format!("%{}%", title_contains));
+        }
+
+        return has_condition;
+    }
 }
 
 #[async_trait]
 impl IArticleRepository for ArticleRepository {
-    async fn create(&self, user_id: Uuid, payload: NewArticle) -> anyhow::Result<Article> {
+    async fn create(&self, user_id: Uuid, new_article: NewArticle) -> anyhow::Result<Article> {
         let article = sqlx::query_as::<_, Article>(
             r#"
+            WITH category AS (
+                    SELECT id FROM categories WHERE public_id = $4
+                ),
+                usr AS (
+                    SELECT id FROM users WHERE public_id = $5
+                )
             INSERT INTO articles (
                 title,
                 body,
@@ -32,20 +79,28 @@ impl IArticleRepository for ArticleRepository {
                 category_id,
                 user_id
             )
-            VALUES (
+            SELECT
                 $1,
                 $2,
                 $3,
-                $4,
-                $5
-            )
-            RETURNING *;
+                category.id,
+                usr.id
+            FROM category
+            RIGHT JOIN usr ON TRUE
+            RETURNING
+                public_id,
+                title,
+                body,
+                status,
+                $4 AS category_public_id,
+                created_at,
+                updated_at
             "#,
         )
-        .bind(payload.title)
-        .bind(payload.body)
-        .bind(payload.status)
-        .bind(payload.category_id)
+        .bind(new_article.title)
+        .bind(new_article.body)
+        .bind(new_article.status)
+        .bind(new_article.category_public_id)
         .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
@@ -55,45 +110,44 @@ impl IArticleRepository for ArticleRepository {
 
     async fn find(
         &self,
-        article_id: i32,
+        article_id: Uuid,
         article_filter: ArticleFilter,
     ) -> anyhow::Result<Article> {
-        let mut query = QueryBuilder::new(
+        let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                id,
-                title,
-                body,
-                status,
-                category_id,
-                created_at,
-                updated_at
-            FROM articles
-            WHERE id = $1
+                a.public_id,
+                a.title,
+                a.body,
+                a.status,
+                c.public_id as category_public_id,
+                a.created_at,
+                a.updated_at
+            FROM articles AS a
+            LEFT JOIN categories AS c
+            ON a.category_id = c.id
+            WHERE a.public_id = 
             "#,
         );
 
-        let mut conditions = Vec::new();
+        qb.push_bind(article_id);
 
-        if article_filter.user_id.is_some() {
-            conditions.push("user_id = $2");
-        };
-
-        if article_filter.status.is_some() {
-            conditions.push("status = $3");
-        };
-
-        if !conditions.is_empty() {
-            query.push(" AND ").push(conditions.join(" AND "));
+        if let Some(user_id) = article_filter.user_id {
+            qb.push(" AND a.user_id = ").push_bind(user_id);
         }
 
-        let article = query
+        if let Some(status) = article_filter.status {
+            qb.push(" AND a.status = ").push_bind(status);
+        }
+
+        let article = qb
             .build_query_as::<Article>()
-            .bind(article_id)
-            .bind(article_filter.user_id)
-            .bind(article_filter.status)
             .fetch_one(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => RepositoryError::NotFound,
+                e => RepositoryError::Unexpected(e.to_string()),
+            })?;
 
         Ok(article)
     }
@@ -102,54 +156,88 @@ impl IArticleRepository for ArticleRepository {
         &self,
         article_filter: ArticleFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<Vec<Article>> {
-        let mut query_builder = QueryBuilder::new(
+    ) -> anyhow::Result<(Vec<Article>, ItemCount)> {
+        // find articles
+        let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                id,
-                title,
-                body,
-                status,
-                category_id,
-                created_at,
-                updated_at
-            FROM articles
+                a.public_id,
+                a.title,
+                a.body,
+                a.status,
+                c.public_id AS category_public_id,
+                a.created_at,
+                a.updated_at
+            FROM articles AS a
+            LEFT JOIN categories AS c ON a.category_id = c.id
+            LEFT JOIN users AS u ON a.user_id = u.id
             "#,
         );
 
-        let mut conditions = Vec::new();
+        // build conditions
+        let has_condition = self.push_article_condition(&mut qb, &article_filter);
 
-        if article_filter.user_id.is_some() {
-            conditions.push("user_id = $1");
-        }
-
-        if article_filter.status.is_some() {
-            conditions.push("status = $2");
-        }
-
-        if pagination.cursor.is_some() {
-            conditions.push("id < $3");
-        }
-
-        if !conditions.is_empty() {
-            query_builder.push(" WHERE ").push(conditions.join(" AND "));
-        }
-
-        query_builder.push(" ORDER BY id DESC LIMIT $4;");
-
-        let articles = query_builder
-            .build_query_as::<Article>()
-            .bind(article_filter.user_id)
-            .bind(article_filter.status)
-            .bind(pagination.cursor)
-            .bind(pagination.per_page)
-            .fetch_all(&self.pool)
+        /*
+        build paginated conditions.
+        cursor, offset can only be used once,
+        because each is validated to prevent conflicts.
+        */
+        if let Some(cursor) = pagination.cursor {
+            // get the id of the article with the given public_id
+            let cid_option = sqlx::query_scalar!(
+                r#"
+                SELECT id FROM articles WHERE public_id = $1
+                "#,
+                cursor
+            )
+            .fetch_optional(&self.pool)
             .await?;
 
-        Ok(articles)
+            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
+            if has_condition {
+                qb.push(" AND ");
+            } else {
+                qb.push(" WHERE ");
+            }
+            qb.push("a.id < ").push_bind(cid);
+        }
+
+        qb.push(" ORDER BY a.id DESC");
+
+        if let Some(offset) = pagination.offset {
+            qb.push(" OFFSET ").push_bind(offset);
+        }
+
+        qb.push(" LIMIT ").push_bind(pagination.per_page);
+
+        let articles = qb.build_query_as::<Article>().fetch_all(&self.pool).await?;
+
+        // count total articles
+        let mut qb = QueryBuilder::new(
+            r#"
+            SELECT
+                COUNT(*)
+            FROM articles AS a
+            LEFT JOIN categories AS c ON a.category_id = c.id
+            LEFT JOIN users AS u ON a.user_id = u.id
+            "#,
+        );
+        // build conditions
+        self.push_article_condition(&mut qb, &article_filter);
+
+        let total = qb
+            .build_query_as::<ItemCount>()
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok((articles, total))
     }
 
-    async fn update(&self, article_id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
+    async fn update(
+        &self,
+        article_id: Uuid,
+        update_article: UpdateArticle,
+    ) -> anyhow::Result<Article> {
         let pre_payload = self.find(article_id, ArticleFilter::default()).await?;
         let article = sqlx::query_as::<_, Article>(
             r#"
@@ -157,20 +245,32 @@ impl IArticleRepository for ArticleRepository {
                 title = $1,
                 body = $2,
                 status = $3,
-                category_id = $4,
+                category_id = (SELECT id FROM categories WHERE public_id = $4),
                 updated_at = now()
-            WHERE id = $5
-            RETURNING *;
+            WHERE public_id = $5
+            RETURNING
+                public_id,
+                title,
+                body,
+                status,
+                $4 AS category_public_id,
+                created_at,
+                updated_at
+            ;
             "#,
         )
         .bind(
-            payload
+            update_article
                 .title
                 .unwrap_or(pre_payload.title.unwrap_or_default()),
         )
-        .bind(payload.body.unwrap_or(pre_payload.body.unwrap_or_default()))
-        .bind(payload.status.unwrap_or(pre_payload.status))
-        .bind(payload.category_id)
+        .bind(
+            update_article
+                .body
+                .unwrap_or(pre_payload.body.unwrap_or_default()),
+        )
+        .bind(update_article.status.unwrap_or(pre_payload.status))
+        .bind(update_article.category_public_id)
         .bind(article_id)
         .fetch_one(&self.pool)
         .await?;
@@ -178,11 +278,12 @@ impl IArticleRepository for ArticleRepository {
         Ok(article)
     }
 
-    async fn delete(&self, article_id: i32) -> anyhow::Result<()> {
+    async fn delete(&self, article_id: Uuid) -> anyhow::Result<()> {
         sqlx::query(
             r#"
             DELETE FROM articles
-            WHERE id = $1;
+            WHERE public_id = $1
+            ;
             "#,
         )
         .bind(article_id)
@@ -195,6 +296,55 @@ impl IArticleRepository for ArticleRepository {
 
         Ok(())
     }
+
+    async fn attach_tags(&self, article_id: Uuid, tag_ids: Vec<Uuid>) -> anyhow::Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        // delete all tags for the article
+        sqlx::query(
+            r#"
+            DELETE FROM article_tags
+            WHERE article_id = (
+                SELECT id FROM articles
+                WHERE public_id = $1
+            );
+            "#,
+        )
+        .bind(article_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            e => RepositoryError::Unexpected(e.to_string()),
+        })?;
+
+        // buck insert new tags
+        sqlx::query(
+            r#"
+            WITH target_article AS (
+                    SELECT id FROM articles
+                    WHERE public_id = $1
+                ),
+                target_tags AS (
+                    SELECT id FROM tags
+                    WHERE public_id = ANY($2)
+                )
+            INSERT INTO article_tags (article_id, tag_id)
+            SELECT target_article.id, u.tag_id
+            FROM target_article
+            CROSS JOIN UNNEST(ARRAY(SELECT id FROM target_tags)) AS u(tag_id)
+            ;
+            "#,
+        )
+        .bind(article_id)
+        .bind(tag_ids)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -203,7 +353,7 @@ mod test {
     use super::*;
     use blog_domain::model::articles::article::ArticleStatus;
     use dotenv::dotenv;
-    use sqlx::{types::Uuid, PgPool};
+    use sqlx::{PgPool, types::Uuid};
 
     #[tokio::test]
     async fn test_article_repository_for_db() {

@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{
-    types::chrono::{DateTime, Local},
     FromRow,
+    types::chrono::{DateTime, Local},
 };
 use std::{fmt, str::FromStr};
+use uuid::Uuid;
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[serde(rename_all = "lowercase")]
 #[sqlx(type_name = "article_status", rename_all = "lowercase")]
 pub enum ArticleStatus {
     Draft,
@@ -44,11 +46,13 @@ impl fmt::Display for ArticleStatus {
 #[derive(Debug, Clone, Serialize, FromRow, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Article {
-    pub id: i32,
+    #[serde(rename = "id")]
+    pub public_id: Uuid,
     pub title: Option<String>,
     pub body: Option<String>,
     pub status: ArticleStatus,
-    pub category_id: Option<i32>,
+    #[serde(rename = "categoryId")]
+    pub category_public_id: Option<Uuid>,
     pub created_at: DateTime<Local>,
     pub updated_at: DateTime<Local>,
 }
@@ -61,7 +65,8 @@ pub struct NewArticle {
     #[validate(length(min = 1, message = "body length mut be 1 or more"))]
     pub body: Option<String>,
     pub status: ArticleStatus,
-    pub category_id: Option<i32>,
+    #[serde(rename = "categoryId")]
+    pub category_public_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -72,5 +77,6 @@ pub struct UpdateArticle {
     #[validate(length(min = 1, message = "body length mut be 1 or more"))]
     pub body: Option<String>,
     pub status: Option<ArticleStatus>,
-    pub category_id: Option<i32>,
+    #[serde(rename = "categoryId")]
+    pub category_public_id: Option<Uuid>,
 }

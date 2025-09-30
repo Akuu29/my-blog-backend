@@ -5,6 +5,7 @@ use sqlx::{
     types::chrono::{DateTime, Local},
 };
 use std::fmt;
+use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, FromRow)]
@@ -17,12 +18,14 @@ pub struct ImageData {
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageDataProps {
-    pub id: i32,
+    #[serde(rename = "id")]
+    pub public_id: Uuid,
     pub name: String,
     pub mime_type: String,
     pub url: Option<String>,
     pub storage_type: String,
-    pub article_id: i32,
+    #[serde(rename = "articleId")]
+    pub article_public_id: Uuid,
     pub created_at: DateTime<Local>,
     pub updated_at: DateTime<Local>,
 }
@@ -59,7 +62,8 @@ pub struct NewImage {
     pub data: Vec<u8>,
     pub url: Option<String>,
     pub storage_type: StorageType,
-    pub article_id: i32,
+    #[serde(rename = "articleId")]
+    pub article_public_id: Uuid,
 }
 
 fn validate_mime_type(mime_type: &str) -> Result<(), ValidationError> {

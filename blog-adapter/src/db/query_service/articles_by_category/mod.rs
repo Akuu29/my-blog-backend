@@ -1,1 +1,0 @@
-pub mod articles_category_query_service;

@@ -1,8 +1,11 @@
-use blog_domain::model::categories::{
-    category::{Category, CategoryFilter, NewCategory, UpdateCategory},
-    i_category_repository::ICategoryRepository,
+use blog_domain::model::{
+    categories::{
+        category::{Category, NewCategory, UpdateCategory},
+        i_category_repository::{CategoryFilter, ICategoryRepository},
+    },
+    common::{item_count::ItemCount, pagination::Pagination},
 };
-use sqlx::types::Uuid;
+use uuid::Uuid;
 
 pub struct CategoryAppService<T: ICategoryRepository> {
     repository: T,
@@ -17,19 +20,23 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
         self.repository.create(user_id, payload).await
     }
 
-    pub async fn all(&self, category_filter: CategoryFilter) -> anyhow::Result<Vec<Category>> {
-        self.repository.all(category_filter).await
+    pub async fn all(
+        &self,
+        category_filter: CategoryFilter,
+        pagination: Pagination,
+    ) -> anyhow::Result<(Vec<Category>, ItemCount)> {
+        self.repository.all(category_filter, pagination).await
     }
 
     pub async fn update(
         &self,
-        category_id: i32,
+        category_id: Uuid,
         payload: UpdateCategory,
     ) -> anyhow::Result<Category> {
         self.repository.update(category_id, payload).await
     }
 
-    pub async fn delete(&self, category_id: i32) -> anyhow::Result<()> {
+    pub async fn delete(&self, category_id: Uuid) -> anyhow::Result<()> {
         self.repository.delete(category_id).await
     }
 }

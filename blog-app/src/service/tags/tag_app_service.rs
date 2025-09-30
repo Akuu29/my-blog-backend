@@ -1,6 +1,9 @@
-use blog_domain::model::tags::{
-    i_tag_repository::{ITagRepository, TagFilter},
-    tag::{NewTag, Tag},
+use blog_domain::model::{
+    common::{item_count::ItemCount, pagination::Pagination},
+    tags::{
+        i_tag_repository::{ITagRepository, TagFilter},
+        tag::{NewTag, Tag},
+    },
 };
 use sqlx::types::Uuid;
 
@@ -17,11 +20,15 @@ impl<T: ITagRepository> TagAppService<T> {
         self.repository.create(user_id, payload).await
     }
 
-    pub async fn all(&self, tag_filter: TagFilter) -> anyhow::Result<Vec<Tag>> {
-        self.repository.all(tag_filter).await
+    pub async fn all(
+        &self,
+        tag_filter: TagFilter,
+        pagination: Pagination,
+    ) -> anyhow::Result<(Vec<Tag>, ItemCount)> {
+        self.repository.all(tag_filter, pagination).await
     }
 
-    pub async fn delete(&self, tag_id: i32) -> anyhow::Result<()> {
+    pub async fn delete(&self, tag_id: Uuid) -> anyhow::Result<()> {
         self.repository.delete(tag_id).await
     }
 }

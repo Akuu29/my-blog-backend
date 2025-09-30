@@ -1,9 +1,13 @@
 use crate::{
-    model::{api_response::ApiResponse, auth_token::AuthToken, validated_json::ValidatedJson},
+    model::{
+        api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
+        paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
+        validated_query_param::ValidatedQueryParam,
+    },
     utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
-    extract::{Extension, Path, Query},
+    extract::{Extension, Path},
     response::IntoResponse,
 };
 use blog_app::{
@@ -19,6 +23,7 @@ use blog_domain::model::{
 };
 use http::StatusCode;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[tracing::instrument(name = "create_tag", skip(tag_app_service, token_app_service, token))]
 pub async fn create<T, U>(
@@ -57,19 +62,34 @@ where
 #[tracing::instrument(name = "all_tags", skip(tag_app_service))]
 pub async fn all<T>(
     Extension(tag_app_service): Extension<Arc<TagAppService<T>>>,
-    Query(tag_filter): Query<TagFilter>,
+    ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<TagFilter>>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ITagRepository,
 {
-    let tags = tag_app_service.all(tag_filter).await.map_err(|e| {
-        let app_err = AppError::from(e);
-        app_err.handle_error("Failed to get all tags")
-    })?;
+    let mut pagination = param.pagination;
+    // To check if there is a next page
+    pagination.per_page += 1;
+
+    let (mut tags, total) = tag_app_service
+        .all(param.filter, pagination.clone())
+        .await
+        .map_err(|e| {
+            let app_err = AppError::from(e);
+            app_err.handle_error("Failed to get all tags")
+        })?;
+
+    let has_next = tags.len() == pagination.per_page as usize;
+    if has_next {
+        tags.pop();
+    }
+
+    let next_cursor = tags.last().map(|tag| tag.public_id).or(None);
+    let paged_body = PagedBody::new(tags, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(
         StatusCode::OK,
-        Some(serde_json::to_string(&tags).unwrap()),
+        Some(serde_json::to_string(&paged_body).unwrap()),
         None,
     ))
 }
@@ -79,7 +99,7 @@ pub async fn delete<T, U>(
     Extension(tag_app_service): Extension<Arc<TagAppService<T>>>,
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
-    Path(tag_id): Path<i32>,
+    Path(tag_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ITagRepository,
@@ -107,7 +127,7 @@ where
 )]
 pub async fn find_tags_by_article_id<T>(
     Extension(tags_attached_article_query_service): Extension<Arc<T>>,
-    Path(article_id): Path<i32>,
+    Path(article_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiResponse<String>>
 where
     T: ITagsAttachedArticleQueryService,

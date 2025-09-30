@@ -1,6 +1,9 @@
-use blog_domain::model::users::{
-    i_user_repository::IUserRepository,
-    user::{NewUser, UpdateUser, User},
+use blog_domain::model::{
+    common::{item_count::ItemCount, pagination::Pagination},
+    users::{
+        i_user_repository::{IUserRepository, UserFilter},
+        user::{NewUser, UpdateUser, User},
+    },
 };
 use sqlx::types::Uuid;
 
@@ -17,13 +20,26 @@ impl<T: IUserRepository> UserAppService<T> {
         self.repository.create(payload).await
     }
 
+    pub async fn all(
+        &self,
+        user_filter: UserFilter,
+        pagination: Pagination,
+    ) -> anyhow::Result<(Vec<User>, ItemCount)> {
+        self.repository.all(user_filter, pagination).await
+    }
+
     pub async fn find(&self, user_id: Uuid) -> anyhow::Result<User> {
         self.repository.find(user_id).await
     }
 
-    // TODO Bad approach because it's not scalable
-    pub async fn find_by_idp_sub(&self, idp_sub: &str) -> anyhow::Result<User> {
-        self.repository.find_by_idp_sub(idp_sub).await
+    pub async fn find_by_user_identity(
+        &self,
+        provider_name: &str,
+        idp_sub: &str,
+    ) -> anyhow::Result<User> {
+        self.repository
+            .find_by_user_identity(provider_name, idp_sub)
+            .await
     }
 
     pub async fn update(&self, user_id: Uuid, payload: UpdateUser) -> anyhow::Result<User> {

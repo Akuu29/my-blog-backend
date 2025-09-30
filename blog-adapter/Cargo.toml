@@ -18,6 +18,7 @@ dotenv.workspace = true
 reqwest.workspace = true
 validator.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [features]
 default = []
