@@ -26,6 +26,7 @@ impl AppError {
                 StatusCode::UNAUTHORIZED
             }
             AppError::UsecaseError(UsecaseError::ValidationFailed(_)) => StatusCode::BAD_REQUEST,
+            AppError::UsecaseError(UsecaseError::PermissionDenied(_)) => StatusCode::FORBIDDEN,
             AppError::RepositoryError(RepositoryError::NotFound) => StatusCode::NOT_FOUND,
             AppError::RepositoryError(RepositoryError::Unexpected(_)) => {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -43,6 +44,9 @@ impl AppError {
             AppError::UsecaseError(UsecaseError::ValidationFailed(_)) => {
                 ErrorMessageKind::Validation
             }
+            AppError::UsecaseError(UsecaseError::PermissionDenied(_)) => {
+                ErrorMessageKind::Forbidden
+            }
             AppError::RepositoryError(RepositoryError::NotFound) => ErrorMessageKind::NotFound,
             AppError::RepositoryError(RepositoryError::Unexpected(_)) => ErrorMessageKind::Internal,
         }
@@ -56,6 +60,9 @@ impl AppError {
                 ErrorLogKind::Authentication
             }
             AppError::UsecaseError(UsecaseError::ValidationFailed(_)) => ErrorLogKind::Validation,
+            AppError::UsecaseError(UsecaseError::PermissionDenied(_)) => {
+                ErrorLogKind::Authorization
+            }
             AppError::RepositoryError(_) => ErrorLogKind::Database,
         }
     }
@@ -63,9 +70,22 @@ impl AppError {
 
 impl From<anyhow::Error> for AppError {
     fn from(e: anyhow::Error) -> Self {
+        // Try to downcast to AppError first
         match e.downcast::<AppError>() {
             Ok(app_error) => app_error,
-            Err(e) => AppError::Unexpected(e.to_string()),
+            Err(e) => {
+                // Try to downcast to UsecaseError
+                match e.downcast::<UsecaseError>() {
+                    Ok(usecase_error) => AppError::UsecaseError(usecase_error),
+                    Err(e) => {
+                        // Try to downcast to RepositoryError
+                        match e.downcast::<RepositoryError>() {
+                            Ok(repository_error) => AppError::RepositoryError(repository_error),
+                            Err(e) => AppError::Unexpected(e.to_string()),
+                        }
+                    }
+                }
+            }
         }
     }
 }

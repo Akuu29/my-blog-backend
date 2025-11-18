@@ -1,7 +1,4 @@
-use crate::{
-    service::{articles::article_service::ArticleService, tags::tag_service::TagService},
-    utils::usecase_error::UsecaseError,
-};
+use crate::{service::tags::tag_service::TagService, utils::usecase_error::UsecaseError};
 use blog_domain::model::{
     articles::{
         article::{Article, NewArticle, UpdateArticle},
@@ -18,7 +15,6 @@ where
     U: ITagRepository,
 {
     article_repository: T,
-    article_service: ArticleService<T>,
     tag_service: TagService<U>,
 }
 
@@ -27,14 +23,9 @@ where
     T: IArticleRepository,
     U: ITagRepository,
 {
-    pub fn new(
-        article_repository: T,
-        article_service: ArticleService<T>,
-        tag_service: TagService<U>,
-    ) -> Self {
+    pub fn new(article_repository: T, tag_service: TagService<U>) -> Self {
         Self {
             article_repository,
-            article_service,
             tag_service,
         }
     }
@@ -65,6 +56,7 @@ where
 
     pub async fn update(
         &self,
+        user_id: Uuid,
         article_id: Uuid,
         payload: UpdateArticle,
     ) -> anyhow::Result<Article> {
@@ -72,6 +64,13 @@ where
             .article_repository
             .find(article_id, ArticleFilter::default())
             .await?;
+
+        // check ownership
+        if pre_article.user_public_id != user_id {
+            return Err(anyhow::anyhow!(UsecaseError::PermissionDenied(
+                "You are not the owner of this article".to_string()
+            )));
+        }
 
         if (payload.title.is_none() && pre_article.title.is_none())
             || (payload.body.is_none() && pre_article.body.is_none())
@@ -84,15 +83,39 @@ where
         self.article_repository.update(article_id, payload).await
     }
 
-    pub async fn delete(&self, article_id: Uuid) -> anyhow::Result<()> {
+    pub async fn delete(&self, user_id: Uuid, article_id: Uuid) -> anyhow::Result<()> {
+        let article = self
+            .article_repository
+            .find(article_id, ArticleFilter::default())
+            .await?;
+
+        // check ownership
+        if article.user_public_id != user_id {
+            return Err(anyhow::anyhow!(UsecaseError::PermissionDenied(
+                "You are not the owner of this article".to_string()
+            )));
+        }
+
         self.article_repository.delete(article_id).await
     }
 
-    pub async fn attach_tags(&self, article_id: Uuid, tag_ids: Vec<Uuid>) -> anyhow::Result<()> {
-        // check if the article exists
-        self.article_service
-            .ensure_exists_article(article_id)
+    pub async fn attach_tags(
+        &self,
+        user_id: Uuid,
+        article_id: Uuid,
+        tag_ids: Vec<Uuid>,
+    ) -> anyhow::Result<()> {
+        let article = self
+            .article_repository
+            .find(article_id, ArticleFilter::default())
             .await?;
+
+        // check ownership
+        if article.user_public_id != user_id {
+            return Err(anyhow::anyhow!(UsecaseError::PermissionDenied(
+                "You are not the owner of this article".to_string()
+            )));
+        }
 
         // check if the tags exists
         let exists_tags = self.tag_service.exists_tags(tag_ids.clone()).await?;

@@ -18,7 +18,7 @@ use blog_adapter::{
     idp::tokens::token_repository::TokenRepository,
 };
 use blog_app::service::{
-    articles::{article_app_service::ArticleAppService, article_service::ArticleService},
+    articles::article_app_service::ArticleAppService,
     categories::category_app_service::CategoryAppService,
     comments::comment_app_service::CommentAppService,
     images::image_app_service::ImageAppService,
@@ -52,13 +52,11 @@ pub async fn run() {
     let http_client = reqwest::Client::new();
 
     // domain services
-    let article_service = ArticleService::new(ArticleRepository::new(pool.clone()));
     let tag_service = TagService::new(TagRepository::new(pool.clone()));
 
     // app services
     let article_app_service = ArticleAppService::new(
         ArticleRepository::new(pool.clone()),
-        article_service,
         tag_service,
     );
     let comment_app_service = CommentAppService::new(CommentRepository::new(pool.clone()));
