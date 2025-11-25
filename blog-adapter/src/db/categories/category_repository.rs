@@ -69,6 +69,7 @@ impl ICategoryRepository for CategoryRepository {
             )
             RETURNING
                 public_id,
+                $2 AS user_public_id,
                 name,
                 created_at,
                 updated_at
@@ -93,6 +94,7 @@ impl ICategoryRepository for CategoryRepository {
             r#"
             SELECT
                 c.public_id,
+                u.public_id AS user_public_id,
                 c.name,
                 c.created_at,
                 c.updated_at
@@ -169,6 +171,7 @@ impl ICategoryRepository for CategoryRepository {
             WHERE public_id = $2
             RETURNING
                 public_id,
+                (SELECT public_id FROM users WHERE id = categories.user_id) AS user_public_id,
                 name,
                 created_at,
                 updated_at
