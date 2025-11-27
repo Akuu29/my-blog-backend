@@ -89,6 +89,7 @@ impl IArticleRepository for ArticleRepository {
             RIGHT JOIN usr ON TRUE
             RETURNING
                 public_id,
+                $5 AS user_public_id,
                 title,
                 body,
                 status,
@@ -117,6 +118,7 @@ impl IArticleRepository for ArticleRepository {
             r#"
             SELECT
                 a.public_id,
+                u.public_id as user_public_id,
                 a.title,
                 a.body,
                 a.status,
@@ -126,14 +128,16 @@ impl IArticleRepository for ArticleRepository {
             FROM articles AS a
             LEFT JOIN categories AS c
             ON a.category_id = c.id
-            WHERE a.public_id = 
+            LEFT JOIN users AS u
+            ON a.user_id = u.id
+            WHERE a.public_id =
             "#,
         );
 
         qb.push_bind(article_id);
 
         if let Some(user_id) = article_filter.user_id {
-            qb.push(" AND a.user_id = ").push_bind(user_id);
+            qb.push(" AND u.public_id = ").push_bind(user_id);
         }
 
         if let Some(status) = article_filter.status {
@@ -162,6 +166,7 @@ impl IArticleRepository for ArticleRepository {
             r#"
             SELECT
                 a.public_id,
+                u.public_id AS user_public_id,
                 a.title,
                 a.body,
                 a.status,
@@ -250,6 +255,7 @@ impl IArticleRepository for ArticleRepository {
             WHERE public_id = $5
             RETURNING
                 public_id,
+                $6 AS user_public_id,
                 title,
                 body,
                 status,
@@ -272,6 +278,7 @@ impl IArticleRepository for ArticleRepository {
         .bind(update_article.status.unwrap_or(pre_payload.status))
         .bind(update_article.category_public_id)
         .bind(article_id)
+        .bind(pre_payload.user_public_id)
         .fetch_one(&self.pool)
         .await?;
 

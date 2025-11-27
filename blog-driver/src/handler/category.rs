@@ -114,7 +114,7 @@ where
     T: ICategoryRepository,
     U: ITokenRepository,
 {
-    let _access_token_data = token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
@@ -122,8 +122,10 @@ where
             app_err.handle_error("Failed to verify access token")
         })?;
 
+    let user_id = access_token_data.claims.sub();
+
     let category = category_app_service
-        .update(category_id, payload)
+        .update(user_id, category_id, payload)
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
@@ -151,7 +153,7 @@ where
     T: ICategoryRepository,
     U: ITokenRepository,
 {
-    let _access_token_data = token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
@@ -159,8 +161,10 @@ where
             app_err.handle_error("Failed to verify access token")
         })?;
 
+    let user_id = access_token_data.claims.sub();
+
     category_app_service
-        .delete(category_id)
+        .delete(user_id, category_id)
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);

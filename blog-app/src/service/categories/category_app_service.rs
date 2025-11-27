@@ -1,3 +1,4 @@
+use crate::utils::usecase_error::UsecaseError;
 use blog_domain::model::{
     categories::{
         category::{Category, NewCategory, UpdateCategory},
@@ -30,13 +31,58 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
 
     pub async fn update(
         &self,
+        user_id: Uuid,
         category_id: Uuid,
         payload: UpdateCategory,
     ) -> anyhow::Result<Category> {
+        // check ownership
+        let (categories, _) = self
+            .repository
+            .all(
+                CategoryFilter {
+                    public_id: Some(category_id),
+                    ..Default::default()
+                },
+                Pagination::default(),
+            )
+            .await?;
+
+        let category = categories.first().ok_or(anyhow::anyhow!(
+            UsecaseError::ValidationFailed("Category not found".to_string())
+        ))?;
+
+        if category.user_public_id != user_id {
+            return Err(anyhow::anyhow!(UsecaseError::PermissionDenied(
+                "You are not the owner of this category".to_string()
+            )));
+        }
+
         self.repository.update(category_id, payload).await
     }
 
-    pub async fn delete(&self, category_id: Uuid) -> anyhow::Result<()> {
+    pub async fn delete(&self, user_id: Uuid, category_id: Uuid) -> anyhow::Result<()> {
+        // check ownership
+        let (categories, _) = self
+            .repository
+            .all(
+                CategoryFilter {
+                    public_id: Some(category_id),
+                    ..Default::default()
+                },
+                Pagination::default(),
+            )
+            .await?;
+
+        let category = categories.first().ok_or(anyhow::anyhow!(
+            UsecaseError::ValidationFailed("Category not found".to_string())
+        ))?;
+
+        if category.user_public_id != user_id {
+            return Err(anyhow::anyhow!(UsecaseError::PermissionDenied(
+                "You are not the owner of this category".to_string()
+            )));
+        }
+
         self.repository.delete(category_id).await
     }
 }

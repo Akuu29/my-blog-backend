@@ -142,7 +142,7 @@ where
     U: ITokenRepository,
     W: ITagRepository,
 {
-    let _access_token_data = token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
@@ -150,8 +150,10 @@ where
             app_err.handle_error("Failed to verify access token")
         })?;
 
+    let user_id = access_token_data.claims.sub();
+
     let article = article_app_service
-        .update(article_id, payload)
+        .update(user_id, article_id, payload)
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);
@@ -180,7 +182,7 @@ where
     U: ITokenRepository,
     V: ITagRepository,
 {
-    let _access_token_data = token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
@@ -188,8 +190,10 @@ where
             app_err.handle_error("Failed to delete article")
         })?;
 
+    let user_id = access_token_data.claims.sub();
+
     article_app_service
-        .delete(article_id)
+        .delete(user_id, article_id)
         .await
         .map(|_| ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
         .map_err(|e| {
@@ -216,7 +220,7 @@ where
     U: IArticleRepository,
     V: ITagRepository,
 {
-    let _access_token_data = token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| {
@@ -224,8 +228,10 @@ where
             app_err.handle_error("Failed to verify access token")
         })?;
 
+    let user_id = access_token_data.claims.sub();
+
     article_app_service
-        .attach_tags(article_id, tag_ids)
+        .attach_tags(user_id, article_id, tag_ids)
         .await
         .map_err(|e| {
             let app_err = AppError::from(e);

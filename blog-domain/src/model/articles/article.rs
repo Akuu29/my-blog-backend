@@ -48,6 +48,8 @@ impl fmt::Display for ArticleStatus {
 pub struct Article {
     #[serde(rename = "id")]
     pub public_id: Uuid,
+    #[serde(rename = "userId")]
+    pub user_public_id: Uuid,
     pub title: Option<String>,
     pub body: Option<String>,
     pub status: ArticleStatus,

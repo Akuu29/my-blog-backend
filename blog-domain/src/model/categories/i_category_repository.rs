@@ -9,7 +9,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 #[serde_as]
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CategoryFilter {
     #[serde_as(as = "Option<DisplayFromStr>")]

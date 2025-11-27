@@ -6,4 +6,6 @@ pub enum UsecaseError {
     ValidationFailed(String),
     #[error("AuthenticationFailed: [{0}]")]
     AuthenticationFailed(String),
+    #[error("PermissionDenied: [{0}]")]
+    PermissionDenied(String),
 }
