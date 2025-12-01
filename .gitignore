@@ -17,3 +17,6 @@ Cargo.lock
 
 **/ssl/*
 !**/ssl/.gitkeep
+
+.claude/settings.local.json
+.claude/commands/
