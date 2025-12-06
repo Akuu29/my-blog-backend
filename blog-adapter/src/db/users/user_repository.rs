@@ -267,3 +267,261 @@ impl IUserRepository for UserRepository {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "database-test")]
+mod test {
+    use super::*;
+    use blog_domain::model::{
+        common::pagination::Pagination,
+        users::user::{NewUser, UpdateUser, UserRole},
+    };
+    use dotenv::dotenv;
+    use serial_test::serial;
+    use sqlx::PgPool;
+
+    // Test helper functions
+    async fn setup() -> (PgPool, UserRepository) {
+        dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL").expect("undefined DATABASE_URL");
+        let pool = PgPool::connect(&database_url).await.expect(&format!(
+            "failed to connect to database, url is {}",
+            database_url
+        ));
+        let repository = UserRepository::new(pool.clone());
+
+        // Ensure "test-idp" identity provider exists for tests
+        let _ = sqlx::query(
+            r#"
+            INSERT INTO identity_providers (name)
+            VALUES ('test-idp')
+            ON CONFLICT (name) DO NOTHING
+            "#,
+        )
+        .execute(&pool)
+        .await;
+
+        (pool, repository)
+    }
+
+    async fn create_test_user(repository: &UserRepository, name_suffix: &str) -> User {
+        let unique_email = format!("test-{}@example.com", name_suffix);
+        let new_user = NewUser::new(
+            "test-idp", // Assuming "google" identity provider exists in test DB
+            &format!("test-idp-sub-{}", name_suffix),
+            &unique_email,
+            true,
+        );
+        repository.create(new_user).await.unwrap()
+    }
+
+    struct TestUserGuard {
+        repository: UserRepository,
+        user_ids: Vec<Uuid>,
+        runtime_handle: tokio::runtime::Handle,
+    }
+
+    impl TestUserGuard {
+        fn new(repository: &UserRepository) -> Self {
+            Self {
+                repository: repository.clone(),
+                user_ids: Vec::new(),
+                runtime_handle: tokio::runtime::Handle::current(),
+            }
+        }
+
+        fn track(&mut self, user_id: Uuid) {
+            self.user_ids.push(user_id);
+        }
+    }
+
+    impl Drop for TestUserGuard {
+        fn drop(&mut self) {
+            let repository = self.repository.clone();
+            let user_ids = self.user_ids.clone();
+            let handle = self.runtime_handle.clone();
+
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                tokio::task::block_in_place(|| {
+                    handle.block_on(async move {
+                        // Cleanup test users
+                        for user_id in &user_ids {
+                            let _ = repository.delete(*user_id).await;
+                        }
+                    });
+                });
+            }));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_create_user() {
+        let (_, repository) = setup().await;
+        let mut guard = TestUserGuard::new(&repository);
+
+        let unique_email = format!("create-{}@example.com", Uuid::new_v4());
+        let new_user = NewUser::new(
+            "test-idp",
+            &format!("test-idp-sub-{}", Uuid::new_v4()),
+            &unique_email,
+            true,
+        );
+
+        let user = repository.create(new_user).await.unwrap();
+        guard.track(user.public_id);
+
+        assert!(!user.name.is_empty());
+        assert_eq!(user.role, UserRole::User);
+        assert!(user.is_active);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_find_user() {
+        let (_, repository) = setup().await;
+        let mut guard = TestUserGuard::new(&repository);
+
+        let user = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
+        guard.track(user.public_id);
+
+        let found_user = repository.find(user.public_id).await.unwrap();
+
+        assert_eq!(found_user.public_id, user.public_id);
+        assert_eq!(found_user.name, user.name);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_find_by_user_identity() {
+        let (_, repository) = setup().await;
+        let mut guard = TestUserGuard::new(&repository);
+
+        let provider_sub = format!("test-idp-sub-{}", Uuid::new_v4());
+        let unique_email = format!("identity-{}@example.com", Uuid::new_v4());
+        let new_user = NewUser::new("test-idp", &provider_sub, &unique_email, true);
+
+        let user = repository.create(new_user).await.unwrap();
+        guard.track(user.public_id);
+
+        let found_user = repository
+            .find_by_user_identity("test-idp", &provider_sub)
+            .await
+            .unwrap();
+
+        assert_eq!(found_user.public_id, user.public_id);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_all_users() {
+        let (_, repository) = setup().await;
+        let mut guard = TestUserGuard::new(&repository);
+
+        let user1 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
+        guard.track(user1.public_id);
+
+        let user2 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
+        guard.track(user2.public_id);
+
+        let filter = UserFilter {
+            name_contains: None,
+        };
+        let pagination = Pagination {
+            per_page: 10,
+            cursor: None,
+            offset: None,
+        };
+
+        let (users, _) = repository.all(filter, pagination).await.unwrap();
+
+        assert!(users.iter().any(|u| u.public_id == user1.public_id));
+        assert!(users.iter().any(|u| u.public_id == user2.public_id));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_all_users_with_cursor() {
+        let (_, repository) = setup().await;
+        let mut guard = TestUserGuard::new(&repository);
+
+        let user1 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
+        guard.track(user1.public_id);
+
+        let user2 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
+        guard.track(user2.public_id);
+
+        let user3 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
+        guard.track(user3.public_id);
+
+        let filter = UserFilter {
+            name_contains: None,
+        };
+
+        // Get first page
+        let pagination = Pagination {
+            per_page: 2,
+            cursor: None,
+            offset: None,
+        };
+        let (first_page, _) = repository.all(filter, pagination).await.unwrap();
+        assert!(first_page.len() >= 2);
+
+        // Get second page using cursor
+        let cursor_id = first_page[1].public_id;
+        let filter_with_cursor = UserFilter {
+            name_contains: None,
+        };
+        let pagination_with_cursor = Pagination {
+            per_page: 2,
+            cursor: Some(cursor_id),
+            offset: None,
+        };
+        let (second_page, _) = repository
+            .all(filter_with_cursor, pagination_with_cursor)
+            .await
+            .unwrap();
+
+        // Verify cursor works - second page should not contain the cursor user
+        assert!(!second_page.iter().any(|u| u.public_id == cursor_id));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_update_user() {
+        let (_, repository) = setup().await;
+        let mut guard = TestUserGuard::new(&repository);
+
+        let user = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
+        guard.track(user.public_id);
+
+        let new_name = format!("Updated-{}", Uuid::new_v4().to_string()[0..8].to_string());
+        let update_payload = UpdateUser {
+            name: Some(new_name.clone()),
+        };
+
+        let updated_user = repository
+            .update(user.public_id, update_payload)
+            .await
+            .unwrap();
+
+        assert_eq!(updated_user.public_id, user.public_id);
+        assert_eq!(updated_user.name, new_name);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_delete_user() {
+        let (_, repository) = setup().await;
+        let mut guard = TestUserGuard::new(&repository);
+
+        let user = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
+        guard.track(user.public_id);
+
+        repository.delete(user.public_id).await.unwrap();
+
+        // Verify deletion
+        let result = repository.find(user.public_id).await;
+        assert!(result.is_err());
+    }
+}
