@@ -1,3 +1,8 @@
+/*
+This implementation is behind the current specifications.
+When releasing features, review the implementation again.
+*/
+
 use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::comments::{
@@ -105,196 +110,199 @@ impl ICommentRepository for CommentRepository {
 #[cfg(feature = "database-test")]
 mod test {
     use super::*;
+    use dotenv::dotenv;
+    use serial_test::serial;
     use sqlx::PgPool;
 
-    #[tokio::test]
-    async fn test_comment_repository_for_db() {
-        dotenv::dotenv().ok();
+    // Test helper functions
+    async fn setup() -> (PgPool, CommentRepository, i32, i32) {
+        dotenv().ok();
         let database_url = std::env::var("DATABASE_URL").expect("undefined DATABASE_URL");
         let pool = PgPool::connect(&database_url).await.expect(&format!(
             "failed to connect to database, url is {}",
             database_url
         ));
-        let repository = CommentRepository::new(pool);
+        let repository = CommentRepository::new(pool.clone());
+
+        // Get test user public_id (UUID) and convert to internal id
+        let user_public_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
+        let user_id = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE public_id = $1")
+            .bind(uuid::Uuid::parse_str(&user_public_id).expect("invalid TEST_USER_ID UUID"))
+            .fetch_one(&pool)
+            .await
+            .expect("failed to get user_id from TEST_USER_ID");
+
+        // Create a test article to use for comments
+        let article_id = sqlx::query_scalar::<_, i32>(
+            r#"
+            INSERT INTO articles (title, body, status, user_id)
+            VALUES ('Test Article for Comments', 'Test Body', 'draft', $1)
+            RETURNING id
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .expect("failed to create test article");
+
+        (pool, repository, user_id, article_id)
+    }
+
+    async fn create_test_comment(
+        repository: &CommentRepository,
+        article_id: i32,
+        user_id: i32,
+        body: &str,
+    ) -> Comment {
         let payload = NewComment {
-            article_id: 1,
-            body: "test".to_string(),
-            user_id: None,
+            article_id,
+            body: body.to_string(),
+            user_id: Some(user_id),
         };
-
-        // create
-        let comment = repository.create(payload.clone()).await.unwrap();
-        assert_eq!(comment.article_id, payload.article_id);
-        assert_eq!(comment.body, payload.body);
-
-        // find
-        let comment = repository.find(comment.id).await.unwrap();
-        assert_eq!(comment.article_id, payload.article_id);
-        assert_eq!(comment.body, payload.body);
-
-        // find_by_article_id
-        let comments = repository
-            .find_by_article_id(comment.article_id)
-            .await
-            .unwrap();
-        assert_eq!(&comment, comments.last().unwrap());
-
-        // update
-        let payload = UpdateComment {
-            body: Some("updated test".to_string()),
-        };
-        let comment = repository
-            .update(comment.id, payload.clone())
-            .await
-            .unwrap();
-        assert_eq!(comment.body, payload.body.unwrap());
-
-        // delete
-        repository.delete(comment.id).await.unwrap();
-        let _ = repository.find(comment.id).await;
-        let res = repository.find(comment.id).await;
-        assert!(res.is_err());
-    }
-}
-
-#[cfg(test)]
-pub mod test_util {
-    use super::*;
-    use chrono::Local;
-    use std::{
-        collections::HashMap,
-        sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-    };
-
-    type Comments = HashMap<i32, Comment>;
-
-    #[derive(Debug, Clone)]
-    pub struct RepositoryForMemory {
-        store: Arc<RwLock<Comments>>,
+        repository.create(payload).await.unwrap()
     }
 
-    impl RepositoryForMemory {
-        pub fn new() -> Self {
+    struct TestCommentGuard {
+        pool: PgPool,
+        repository: CommentRepository,
+        comment_ids: Vec<i32>,
+        article_id: Option<i32>,
+        runtime_handle: tokio::runtime::Handle,
+    }
+
+    impl TestCommentGuard {
+        fn new(pool: &PgPool, repository: &CommentRepository, article_id: Option<i32>) -> Self {
             Self {
-                store: Arc::default(),
+                pool: pool.clone(),
+                repository: repository.clone(),
+                comment_ids: Vec::new(),
+                article_id,
+                runtime_handle: tokio::runtime::Handle::current(),
             }
         }
 
-        fn write_store_ref(&self) -> RwLockWriteGuard<Comments> {
-            self.store.write().unwrap()
-        }
-
-        fn read_store_ref(&self) -> RwLockReadGuard<Comments> {
-            self.store.read().unwrap()
+        fn track(&mut self, comment_id: i32) {
+            self.comment_ids.push(comment_id);
         }
     }
 
-    #[async_trait]
-    impl ICommentRepository for RepositoryForMemory {
-        async fn create(&self, payload: NewComment) -> anyhow::Result<Comment> {
-            let mut store = self.write_store_ref();
-            let id = (store.len() + 1) as i32;
-            let comment = Comment {
-                id,
-                article_id: payload.article_id,
-                body: payload.body,
-                created_at: Local::now(),
-                updated_at: Local::now(),
-            };
+    impl Drop for TestCommentGuard {
+        fn drop(&mut self) {
+            // Clone the data needed for cleanup
+            let pool = self.pool.clone();
+            let repository = self.repository.clone();
+            let comment_ids = self.comment_ids.clone();
+            let article_id = self.article_id;
+            let handle = self.runtime_handle.clone();
 
-            store.insert(id, comment.clone());
-            Ok(comment)
-        }
+            // Use block_in_place to allow blocking in async context
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                tokio::task::block_in_place(|| {
+                    handle.block_on(async move {
+                        // Cleanup test comments
+                        for comment_id in &comment_ids {
+                            let _ = repository.delete(*comment_id).await;
+                        }
 
-        async fn find(&self, id: i32) -> anyhow::Result<Comment> {
-            let store = self.read_store_ref();
-            let comment = store
-                .get(&id)
-                .map(|comment| comment.clone())
-                .ok_or(RepositoryError::NotFound)?;
-
-            Ok(comment)
-        }
-
-        async fn find_by_article_id(&self, article_id: i32) -> anyhow::Result<Vec<Comment>> {
-            let store = self.read_store_ref();
-            let comments = store
-                .values()
-                .filter(|comment| comment.article_id == article_id)
-                .cloned()
-                .collect();
-
-            Ok(comments)
-        }
-
-        async fn update(&self, id: i32, payload: UpdateComment) -> anyhow::Result<Comment> {
-            let mut store = self.write_store_ref();
-            let pre_comment = store.get(&id).ok_or(RepositoryError::NotFound)?.clone();
-            let comment = Comment {
-                id,
-                article_id: pre_comment.article_id,
-                body: payload.body.unwrap_or(pre_comment.body),
-                created_at: pre_comment.created_at,
-                updated_at: Local::now(),
-            };
-
-            store.insert(id, comment.clone());
-            Ok(comment)
-        }
-
-        async fn delete(&self, id: i32) -> anyhow::Result<()> {
-            let mut store = self.write_store_ref();
-            store.remove(&id).ok_or(RepositoryError::NotFound)?;
-
-            Ok(())
+                        // Cleanup test article if created
+                        if let Some(article_id) = article_id {
+                            let _ = sqlx::query("DELETE FROM articles WHERE id = $1")
+                                .bind(article_id)
+                                .execute(&pool)
+                                .await;
+                        }
+                    });
+                });
+            }));
         }
     }
 
-    #[cfg(test)]
-    mod test {
-        use super::*;
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_create_comment() {
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
-        #[tokio::test]
-        async fn test_comment_repository_for_memory() {
-            let repository = RepositoryForMemory::new();
-            let payload = NewComment {
-                article_id: 1,
-                body: "test".to_string(),
-                user_id: None,
-            };
+        let body = "test comment body";
+        let payload = NewComment {
+            article_id,
+            body: body.to_string(),
+            user_id: Some(user_id),
+        };
 
-            // create
-            let comment = repository.create(payload.clone()).await.unwrap();
-            assert_eq!(comment.article_id, payload.article_id);
-            assert_eq!(comment.body, payload.body);
+        let comment = repository.create(payload.clone()).await.unwrap();
+        guard.track(comment.id);
 
-            // find
-            let comment = repository.find(comment.id).await.unwrap();
-            assert_eq!(comment.article_id, payload.article_id);
-            assert_eq!(comment.body, payload.body);
+        assert_eq!(comment.article_id, article_id);
+        assert_eq!(comment.body, body);
+    }
 
-            // find_by_article_id
-            let comments = repository
-                .find_by_article_id(payload.article_id)
-                .await
-                .unwrap();
-            assert_eq!(comments.len(), 1);
-            assert_eq!(comments[0].article_id, payload.article_id);
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_find_comment() {
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
-            // update
-            let payload = UpdateComment {
-                body: Some("updated body".to_string()),
-            };
-            let comment = repository
-                .update(comment.id, payload.clone())
-                .await
-                .unwrap();
-            assert_eq!(comment.body, payload.body.unwrap());
+        let comment =
+            create_test_comment(&repository, article_id, user_id, "test find comment").await;
+        guard.track(comment.id);
 
-            // delete
-            repository.delete(comment.id).await.unwrap();
-            let comments = repository.find(comment.id).await;
-            assert!(comments.is_err());
-        }
+        let found_comment = repository.find(comment.id).await.unwrap();
+
+        assert_eq!(found_comment.id, comment.id);
+        assert_eq!(found_comment.article_id, article_id);
+        assert_eq!(found_comment.body, comment.body);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_find_by_article_id() {
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
+
+        let comment1 = create_test_comment(&repository, article_id, user_id, "comment 1").await;
+        guard.track(comment1.id);
+
+        let comment2 = create_test_comment(&repository, article_id, user_id, "comment 2").await;
+        guard.track(comment2.id);
+
+        let comments = repository.find_by_article_id(article_id).await.unwrap();
+
+        assert!(comments.iter().any(|c| c.id == comment1.id));
+        assert!(comments.iter().any(|c| c.id == comment2.id));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_update_comment() {
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
+
+        let comment = create_test_comment(&repository, article_id, user_id, "original body").await;
+        guard.track(comment.id);
+
+        let update_payload = UpdateComment {
+            body: Some("updated body".to_string()),
+        };
+
+        let updated_comment = repository.update(comment.id, update_payload).await.unwrap();
+
+        assert_eq!(updated_comment.id, comment.id);
+        assert_eq!(updated_comment.body, "updated body");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_delete_comment() {
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
+
+        let comment = create_test_comment(&repository, article_id, user_id, "to delete").await;
+        guard.track(comment.id);
+
+        repository.delete(comment.id).await.unwrap();
+
+        let result = repository.find(comment.id).await;
+        assert!(result.is_err());
     }
 }
