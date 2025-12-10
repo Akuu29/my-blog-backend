@@ -205,3 +205,271 @@ impl ICategoryRepository for CategoryRepository {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "database-test")]
+mod test {
+    use super::*;
+    use blog_domain::model::common::pagination::Pagination;
+    use dotenv::dotenv;
+    use serial_test::serial;
+    use sqlx::PgPool;
+
+    // Test helper functions
+    async fn setup() -> (PgPool, CategoryRepository, Uuid) {
+        dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL").expect("undefined DATABASE_URL");
+        let pool = PgPool::connect(&database_url).await.expect(&format!(
+            "failed to connect to database, url is {}",
+            database_url
+        ));
+        let repository = CategoryRepository::new(pool.clone());
+
+        // Get test user public_id (UUID)
+        let user_public_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
+        let user_uuid = uuid::Uuid::parse_str(&user_public_id).expect("invalid TEST_USER_ID UUID");
+
+        (pool, repository, user_uuid)
+    }
+
+    async fn create_test_category(
+        repository: &CategoryRepository,
+        user_uuid: Uuid,
+        name: &str,
+    ) -> Category {
+        let payload = NewCategory {
+            name: name.to_string(),
+        };
+        repository.create(user_uuid, payload).await.unwrap()
+    }
+
+    struct TestCategoryGuard {
+        repository: CategoryRepository,
+        category_ids: Vec<Uuid>,
+        runtime_handle: tokio::runtime::Handle,
+    }
+
+    impl TestCategoryGuard {
+        fn new(repository: &CategoryRepository) -> Self {
+            Self {
+                repository: repository.clone(),
+                category_ids: Vec::new(),
+                runtime_handle: tokio::runtime::Handle::current(),
+            }
+        }
+
+        fn track(&mut self, category_id: Uuid) {
+            self.category_ids.push(category_id);
+        }
+    }
+
+    impl Drop for TestCategoryGuard {
+        fn drop(&mut self) {
+            let repository = self.repository.clone();
+            let category_ids = self.category_ids.clone();
+            let handle = self.runtime_handle.clone();
+
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                tokio::task::block_in_place(|| {
+                    handle.block_on(async move {
+                        // Cleanup test categories
+                        for category_id in &category_ids {
+                            let _ = repository.delete(*category_id).await;
+                        }
+                    });
+                });
+            }));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_create_category() {
+        let (_, repository, user_uuid) = setup().await;
+        let mut guard = TestCategoryGuard::new(&repository);
+
+        let unique_name = format!("test category {}", Uuid::new_v4());
+        let payload = NewCategory {
+            name: unique_name.clone(),
+        };
+
+        let category = repository.create(user_uuid, payload).await.unwrap();
+        guard.track(category.public_id);
+
+        assert_eq!(category.name, unique_name);
+        assert_eq!(category.user_public_id, user_uuid);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_all_categories() {
+        let (_, repository, user_uuid) = setup().await;
+        let mut guard = TestCategoryGuard::new(&repository);
+
+        let category1 = create_test_category(
+            &repository,
+            user_uuid,
+            &format!("category 1 {}", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(category1.public_id);
+
+        let category2 = create_test_category(
+            &repository,
+            user_uuid,
+            &format!("category 2 {}", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(category2.public_id);
+
+        let filter = CategoryFilter {
+            public_id: None,
+            name: None,
+            user_public_id: Some(user_uuid),
+        };
+        let pagination = Pagination {
+            per_page: 10,
+            cursor: None,
+            offset: None,
+        };
+
+        let (categories, _) = repository.all(filter, pagination).await.unwrap();
+
+        assert!(
+            categories
+                .iter()
+                .any(|c| c.public_id == category1.public_id)
+        );
+        assert!(
+            categories
+                .iter()
+                .any(|c| c.public_id == category2.public_id)
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_all_categories_with_cursor() {
+        let (_, repository, user_uuid) = setup().await;
+        let mut guard = TestCategoryGuard::new(&repository);
+
+        let category1 = create_test_category(
+            &repository,
+            user_uuid,
+            &format!("category cursor 1 {}", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(category1.public_id);
+
+        let category2 = create_test_category(
+            &repository,
+            user_uuid,
+            &format!("category cursor 2 {}", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(category2.public_id);
+
+        let category3 = create_test_category(
+            &repository,
+            user_uuid,
+            &format!("category cursor 3 {}", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(category3.public_id);
+
+        let filter = CategoryFilter {
+            public_id: None,
+            name: None,
+            user_public_id: Some(user_uuid),
+        };
+
+        // Get first page
+        let pagination = Pagination {
+            per_page: 2,
+            cursor: None,
+            offset: None,
+        };
+        let (first_page, _) = repository.all(filter, pagination).await.unwrap();
+        assert!(first_page.len() >= 2);
+
+        // Get second page using cursor
+        let cursor_id = first_page[1].public_id;
+        let filter_with_cursor = CategoryFilter {
+            public_id: None,
+            name: None,
+            user_public_id: Some(user_uuid),
+        };
+        let pagination_with_cursor = Pagination {
+            per_page: 2,
+            cursor: Some(cursor_id),
+            offset: None,
+        };
+        let (second_page, _) = repository
+            .all(filter_with_cursor, pagination_with_cursor)
+            .await
+            .unwrap();
+
+        // Verify cursor works - second page should not contain the cursor category
+        assert!(!second_page.iter().any(|c| c.public_id == cursor_id));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_update_category() {
+        let (_, repository, user_uuid) = setup().await;
+        let mut guard = TestCategoryGuard::new(&repository);
+
+        let category = create_test_category(
+            &repository,
+            user_uuid,
+            &format!("original name {}", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(category.public_id);
+
+        let updated_name = format!("updated name {}", Uuid::new_v4());
+        let update_payload = UpdateCategory {
+            name: updated_name.clone(),
+        };
+
+        let updated_category = repository
+            .update(category.public_id, update_payload)
+            .await
+            .unwrap();
+
+        assert_eq!(updated_category.public_id, category.public_id);
+        assert_eq!(updated_category.name, updated_name);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_delete_category() {
+        let (_, repository, user_uuid) = setup().await;
+        let mut guard = TestCategoryGuard::new(&repository);
+
+        let category = create_test_category(
+            &repository,
+            user_uuid,
+            &format!("to delete {}", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(category.public_id);
+
+        repository.delete(category.public_id).await.unwrap();
+
+        // Verify deletion by trying to find it
+        let filter = CategoryFilter {
+            public_id: Some(category.public_id),
+            name: None,
+            user_public_id: None,
+        };
+        let pagination = Pagination {
+            per_page: 10,
+            cursor: None,
+            offset: None,
+        };
+        let (categories, _) = repository.all(filter, pagination).await.unwrap();
+
+        assert!(categories.is_empty());
+    }
+}
