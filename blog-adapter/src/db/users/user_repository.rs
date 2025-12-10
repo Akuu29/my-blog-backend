@@ -307,7 +307,7 @@ mod test {
     async fn create_test_user(repository: &UserRepository, name_suffix: &str) -> User {
         let unique_email = format!("test-{}@example.com", name_suffix);
         let new_user = NewUser::new(
-            "test-idp", // Assuming "google" identity provider exists in test DB
+            "test-idp", // Uses "test-idp" identity provider created in setup
             &format!("test-idp-sub-{}", name_suffix),
             &unique_email,
             true,
