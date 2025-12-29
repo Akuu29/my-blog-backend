@@ -1,10 +1,10 @@
 use crate::{
+    error::AppError,
     model::{
         api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
         paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
         validated_query_param::ValidatedQueryParam,
     },
-    utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
     extract::{Extension, Path},
@@ -34,7 +34,7 @@ pub async fn create_category<T, U>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewCategory>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ICategoryRepository,
     U: ITokenRepository,
@@ -42,18 +42,12 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let category = category_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to create category")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -66,7 +60,7 @@ where
 pub async fn all_categories<T>(
     Extension(category_app_service): Extension<Arc<CategoryAppService<T>>>,
     ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<CategoryFilter>>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ICategoryRepository,
 {
@@ -77,10 +71,7 @@ where
     let (mut categories, total) = category_app_service
         .all(param.filter, pagination.clone())
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to get all categories")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let has_next = categories.len() == pagination.per_page as usize;
     if has_next {
@@ -109,7 +100,7 @@ pub async fn update_category<T, U>(
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(category_id): Path<Uuid>,
     ValidatedJson(payload): ValidatedJson<UpdateCategory>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ICategoryRepository,
     U: ITokenRepository,
@@ -117,20 +108,14 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let user_id = access_token_data.claims.sub();
 
     let category = category_app_service
         .update(user_id, category_id, payload)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to update category")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -148,7 +133,7 @@ pub async fn delete_category<T, U>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(category_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ICategoryRepository,
     U: ITokenRepository,
@@ -156,20 +141,14 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let user_id = access_token_data.claims.sub();
 
     category_app_service
         .delete(user_id, category_id)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to delete category")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }

@@ -1,9 +1,6 @@
 use crate::{
-    model::{
-        api_response::ApiResponse,
-        error_message::{ErrorMessage, ErrorMessageKind},
-    },
-    utils::error_log_kind::ErrorLogKind,
+    error::{ErrorCode, ErrorResponse},
+    model::api_response::ApiResponse,
 };
 use axum::{
     async_trait,
@@ -28,29 +25,29 @@ where
     async fn from_request(req: Request, _: &B) -> Result<Self, Self::Rejection> {
         let query_string = req.uri().query().unwrap_or_default();
         let val = serde_qs::from_str::<T>(query_string).map_err(|e| {
-            tracing::error!(error.kind=%ErrorLogKind::Validation, error.message=%e.to_string());
+            tracing::error!(error.kind="Unexpected", error.message=%e.to_string());
 
-            let err_msg = ErrorMessage::new(
-                ErrorMessageKind::BadRequest,
+            let res_body = ErrorResponse::new(
+                ErrorCode::InvalidInput,
                 format!("Invalid query param: {}", e),
             );
             ApiResponse::new(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&err_msg).unwrap()),
+                Some(serde_json::to_string(&res_body).unwrap()),
                 None,
             )
         })?;
 
         val.validate().map_err(|e| {
-            tracing::error!(error.kind=%ErrorLogKind::Validation, error.message=%e.to_string());
+            tracing::error!(error.kind="Validation", error.message=%e.to_string());
 
-            let err_msg = ErrorMessage::new(
-                ErrorMessageKind::Validation,
+            let res_body = ErrorResponse::new(
+                ErrorCode::ValidationError,
                 format!("Validation error: {}", e).replace("\n", ", "),
             );
             ApiResponse::new(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&err_msg).unwrap()),
+                Some(serde_json::to_string(&res_body).unwrap()),
                 None,
             )
         })?;

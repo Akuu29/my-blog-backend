@@ -1,7 +1,5 @@
 use crate::{
-    model::api_response::ApiResponse,
-    service::cookie_service::CookieService,
-    utils::{app_error::AppError, error_handler::ErrorHandler},
+    error::AppError, model::api_response::ApiResponse, service::cookie_service::CookieService,
 };
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse};
 use axum_extra::extract::cookie::PrivateCookieJar;
@@ -26,33 +24,26 @@ pub async fn refresh_access_token<T, U>(
     Extension(user_app_service): Extension<Arc<UserAppService<U>>>,
     Extension(cookie_service): Extension<Arc<CookieService>>,
     jar: PrivateCookieJar,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ITokenRepository,
     U: IUserRepository,
 {
-    let refresh_token = cookie_service.get_refresh_token(&jar).map_err(|e| {
-        let app_err = AppError::from(e);
-        app_err.handle_error("Failed to get refresh token")
-    })?;
+    let refresh_token = cookie_service
+        .get_refresh_token(&jar)
+        .map_err(|e| AppError::from(e))?;
     let refresh_token = RefreshTokenString(refresh_token);
 
     let token_data = token_app_service
         .verify_refresh_token(refresh_token)
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify refresh token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let exists_user = user_app_service.find(token_data.claims.sub()).await;
     match exists_user {
         Ok(user) => {
             let access_token = token_app_service
                 .generate_access_token(&user)
-                .map_err(|e| {
-                    let app_err = AppError::from(e);
-                    app_err.handle_error("Failed to generate access token")
-                })?;
+                .map_err(|e| AppError::from(e))?;
             let api_credentials = ApiCredentials::new(&access_token);
 
             Ok(ApiResponse::new(
@@ -61,10 +52,7 @@ where
                 None,
             ))
         }
-        Err(e) => {
-            let app_err = AppError::from(e);
-            Err(app_err.handle_error("Failed to find user"))
-        }
+        Err(e) => Err(AppError::from(e)),
     }
 }
 

@@ -1,10 +1,10 @@
 use crate::{
+    error::AppError,
     model::{
         api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
         paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
         validated_query_param::ValidatedQueryParam,
     },
-    utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
     extract::{Extension, Path},
@@ -31,7 +31,7 @@ pub async fn create<T, U>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewTag>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ITagRepository,
     U: ITokenRepository,
@@ -39,18 +39,12 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let tag = tag_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to create tag")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -63,7 +57,7 @@ where
 pub async fn all<T>(
     Extension(tag_app_service): Extension<Arc<TagAppService<T>>>,
     ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<TagFilter>>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ITagRepository,
 {
@@ -74,10 +68,7 @@ where
     let (mut tags, total) = tag_app_service
         .all(param.filter, pagination.clone())
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to get all tags")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let has_next = tags.len() == pagination.per_page as usize;
     if has_next {
@@ -100,7 +91,7 @@ pub async fn delete<T, U>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(tag_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ITagRepository,
     U: ITokenRepository,
@@ -108,15 +99,12 @@ where
     token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
-    tag_app_service.delete(tag_id).await.map_err(|e| {
-        let app_err = AppError::from(e);
-        app_err.handle_error("Failed to delete tag")
-    })?;
+    tag_app_service
+        .delete(tag_id)
+        .await
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
@@ -128,17 +116,14 @@ where
 pub async fn find_tags_by_article_id<T>(
     Extension(tags_attached_article_query_service): Extension<Arc<T>>,
     Path(article_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ITagsAttachedArticleQueryService,
 {
     let tags = tags_attached_article_query_service
         .find_tags_by_article_id(article_id)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to find tags by article id")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
