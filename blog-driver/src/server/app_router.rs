@@ -1,11 +1,12 @@
 use crate::{
     handler::{article, category, comment, image, tag, token, user},
+    middleware::logging::logging_middleware,
     server::app_state::AppState,
     service::cookie_service::CookieService,
 };
 use axum::extract::DefaultBodyLimit;
 use axum::{
-    Extension, Router,
+    Extension, Router, middleware,
     routing::{delete, get, patch, post, put},
 };
 use blog_app::{
@@ -113,6 +114,7 @@ impl AppRouter {
             .layer(Extension(Arc::new(cookie_service)))
             .layer(DefaultBodyLimit::max(max_request_body_size))
             .layer(cors_layer)
+            .layer(middleware::from_fn(logging_middleware))
             .with_state(app_state);
 
         Self { router }

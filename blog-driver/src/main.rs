@@ -1,6 +1,7 @@
 mod config;
 mod error;
 mod handler;
+mod middleware;
 mod model;
 mod server;
 mod service;
