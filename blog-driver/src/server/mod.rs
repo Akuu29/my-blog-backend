@@ -8,7 +8,6 @@ use blog_adapter::{
         comments::comment_repository::CommentRepository,
         images::image_repository::ImageRepository,
         query_service::{
-            article_image::article_image_query_service::ArticleImageQueryService,
             articles_by_tag::articles_tag_query_service::ArticlesByTagQueryService,
             tags_attached_article::tags_attached_article_query_service::TagsAttachedArticleQueryService,
         },
@@ -69,7 +68,6 @@ pub async fn run() {
     // query services
     let article_by_tag_query_service = ArticlesByTagQueryService::new(pool.clone());
     let tags_attached_article_query_service = TagsAttachedArticleQueryService::new(pool.clone());
-    let article_image_query_service = ArticleImageQueryService::new(pool.clone());
 
     // cookie service (It is a driver layer service)
     let cookie_service = CookieService::new();
@@ -110,7 +108,6 @@ pub async fn run() {
         article_by_tag_query_service,
         tags_attached_article_query_service,
         image_app_service,
-        article_image_query_service,
         cookie_service,
     );
     let domain = std::env::var("INTERNAL_API_DOMAIN").expect("undefined INTERNAL_API_DOMAIN");

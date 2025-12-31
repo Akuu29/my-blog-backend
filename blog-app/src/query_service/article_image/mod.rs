@@ -1,1 +1,0 @@
-pub mod i_article_image_query_service;

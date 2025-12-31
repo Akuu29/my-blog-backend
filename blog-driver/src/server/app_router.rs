@@ -11,7 +11,6 @@ use axum::{
 };
 use blog_app::{
     query_service::{
-        article_image::i_article_image_query_service::IArticleImageQueryService,
         articles_by_tag::i_articles_by_tag_query_service::IArticlesByTagQueryService,
         tags_attached_article::i_tags_attached_article_query_service::ITagsAttachedArticleQueryService,
     },
@@ -48,7 +47,6 @@ impl AppRouter {
         ArticleByTagQS,
         TagsAttachedArticleQS,
         ImageRepo,
-        ArticleImageQS,
     >(
         cors_layer: CorsLayer,
         app_state: AppState,
@@ -61,7 +59,6 @@ impl AppRouter {
         article_by_tag_query_service: ArticleByTagQS,
         tags_attached_article_query_service: TagsAttachedArticleQS,
         image_app_service: ImageAppService<ImageRepo>,
-        article_image_query_service: ArticleImageQS,
         cookie_service: CookieService,
     ) -> Self
     where
@@ -74,7 +71,6 @@ impl AppRouter {
         ArticleByTagQS: IArticlesByTagQueryService,
         TagsAttachedArticleQS: ITagsAttachedArticleQueryService,
         ImageRepo: IImageRepository,
-        ArticleImageQS: IArticleImageQueryService,
     {
         let token_router = Self::create_token_router::<TokenRepo, UserRepo>();
         let users_router = Self::create_users_router::<TokenRepo, UserRepo>();
@@ -89,10 +85,7 @@ impl AppRouter {
         let tag_router = Self::create_tag_router::<TokenRepo, TagRep, TagsAttachedArticleQS>(
             tags_attached_article_query_service,
         );
-        let image_router = Self::create_image_router::<TokenRepo, ImageRepo, ArticleImageQS>(
-            image_app_service,
-            article_image_query_service,
-        );
+        let image_router = Self::create_image_router::<TokenRepo, ImageRepo>(image_app_service);
 
         let max_request_body_size = std::env::var("MAX_REQUEST_BODY_SIZE")
             .expect("undefined MAX_REQUEST_BODY_SIZE")
@@ -226,22 +219,17 @@ impl AppRouter {
             .route_layer(Extension(Arc::new(tags_attached_article_query_service)))
     }
 
-    fn create_image_router<T, U, V>(
-        image_app_service: ImageAppService<U>,
-        article_image_query_service: V,
-    ) -> Router<AppState>
+    fn create_image_router<T, U>(image_app_service: ImageAppService<U>) -> Router<AppState>
     where
         T: ITokenRepository,
         U: IImageRepository,
-        V: IArticleImageQueryService,
     {
         Router::new()
             .route("/", post(image::create::<T, U>).get(image::all::<U>))
             .route(
                 "/:image_id",
-                get(image::find_data::<U>).delete(image::delete::<T, U, V>),
+                get(image::find_data::<U>).delete(image::delete::<T, U>),
             )
             .route_layer(Extension(Arc::new(image_app_service)))
-            .route_layer(Extension(Arc::new(article_image_query_service)))
     }
 }

@@ -30,6 +30,14 @@ pub struct ImageDataProps {
     pub updated_at: DateTime<Local>,
 }
 
+#[derive(Debug, FromRow)]
+pub struct ImageWithOwner {
+    pub public_id: Uuid,
+    pub name: String,
+    pub article_public_id: Uuid,
+    pub article_owner_id: Uuid,
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "storage_type", rename_all = "lowercase")]
 pub enum StorageType {

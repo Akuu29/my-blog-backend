@@ -2,7 +2,7 @@ use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
 use blog_domain::model::images::{
     i_image_repository::{IImageRepository, ImageFilter},
-    image::{ImageData, ImageDataProps, NewImage},
+    image::{ImageData, ImageDataProps, ImageWithOwner, NewImage},
 };
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -138,6 +138,28 @@ impl IImageRepository for ImageRepository {
         })?;
 
         Ok(image_data)
+    }
+
+    async fn find_with_owner(&self, image_id: Uuid) -> anyhow::Result<Option<ImageWithOwner>> {
+        let image_with_owner = sqlx::query_as::<_, ImageWithOwner>(
+            r#"
+            SELECT
+                i.public_id,
+                i.name,
+                a.public_id AS article_public_id,
+                u.public_id AS article_owner_id
+            FROM images AS i
+            INNER JOIN articles AS a ON i.article_id = a.id
+            INNER JOIN users AS u ON u.id = a.user_id
+            WHERE i.public_id = $1
+            ;
+            "#,
+        )
+        .bind(image_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(image_with_owner)
     }
 
     async fn delete(&self, image_id: Uuid) -> anyhow::Result<()> {
@@ -403,5 +425,38 @@ mod test {
         // Verify deletion
         let result = repository.find_data(image.public_id).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_find_with_owner() {
+        let (pool, repository, user_uuid, article_public_id) = setup().await;
+        let mut guard = TestImageGuard::new(&pool, &repository, Some(article_public_id));
+
+        // Create test image
+        let image = create_test_image(
+            &repository,
+            article_public_id,
+            &format!("owned_image_{}.png", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(image.public_id);
+
+        // Test successful case: find existing image with owner
+        let result = repository.find_with_owner(image.public_id).await.unwrap();
+
+        assert!(result.is_some());
+        let image_with_owner = result.unwrap();
+
+        assert_eq!(image_with_owner.public_id, image.public_id);
+        assert_eq!(image_with_owner.name, image.name);
+        assert_eq!(image_with_owner.article_public_id, article_public_id);
+        assert_eq!(image_with_owner.article_owner_id, user_uuid);
+
+        // Test not found case: non-existent image
+        let non_existent_id = Uuid::new_v4();
+        let result = repository.find_with_owner(non_existent_id).await.unwrap();
+
+        assert!(result.is_none());
     }
 }
