@@ -79,7 +79,8 @@ impl AppRouter {
                 article_app_service,
                 article_by_tag_query_service,
             );
-        let comments_router = Self::create_comments_router::<CommentRepo>(comment_app_service);
+        let comments_router =
+            Self::create_comments_router::<CommentRepo, TokenRepo>(comment_app_service);
         let category_router =
             Self::create_category_router::<TokenRepo, CategoryRepo>(category_app_service);
         let tag_router = Self::create_tag_router::<TokenRepo, TagRep, TagsAttachedArticleQS>(
@@ -135,8 +136,8 @@ impl AppRouter {
             .route(
                 "/:user_id",
                 get(user::find::<U>)
-                    .patch(user::update::<U>)
-                    .delete(user::delete::<U>),
+                    .patch(user::update::<T, U>)
+                    .delete(user::delete::<T, U>),
             )
     }
 
@@ -167,21 +168,21 @@ impl AppRouter {
             .route_layer(Extension(Arc::new(article_by_tag_query_service)))
     }
 
-    fn create_comments_router<T>(comment_app_service: CommentAppService<T>) -> Router<AppState>
+    fn create_comments_router<T, U>(comment_app_service: CommentAppService<T>) -> Router<AppState>
     where
         T: ICommentRepository,
+        U: ITokenRepository,
     {
         Router::new()
-            .route("/", post(comment::create_comment::<T>))
+            .route(
+                "/",
+                get(comment::all_comments::<T>).post(comment::create_comment::<T, U>),
+            )
             .route(
                 "/:id",
                 get(comment::find_comment::<T>)
-                    .patch(comment::update_comment::<T>)
-                    .delete(comment::delete_comment::<T>),
-            )
-            .route(
-                "/related/:article_id",
-                get(comment::find_by_article_id::<T>),
+                    .patch(comment::update_comment::<T, U>)
+                    .delete(comment::delete_comment::<T, U>),
             )
             .route_layer(Extension(Arc::new(comment_app_service)))
     }
