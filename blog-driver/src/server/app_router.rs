@@ -136,8 +136,8 @@ impl AppRouter {
             .route(
                 "/:user_id",
                 get(user::find::<U>)
-                    .patch(user::update::<T, U>)
-                    .delete(user::delete::<T, U>),
+                    .patch(user::update::<U, T>)
+                    .delete(user::delete::<U, T>),
             )
     }
 

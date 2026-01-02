@@ -222,22 +222,27 @@ where
     ))
 }
 
-#[tracing::instrument(name = "update_user", skip(user_app_service))]
-pub async fn update<T>(
+#[tracing::instrument(name = "update_user", skip(user_app_service, token_app_service, token))]
+pub async fn update<T, U>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
     Path(user_id): Path<Uuid>,
     ValidatedJson(payload): ValidatedJson<UpdateUser>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IUserRepository,
+    U: ITokenRepository,
 {
-    let user = user_app_service
-        .update(user_id, payload)
+    let token_data = token_app_service
+        .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to update user")
-        })?;
+        .map_err(|e| AppError::from(e))?;
+
+    let user = user_app_service
+        .update_with_auth(user_id, token_data.claims.sub(), payload)
+        .await
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -246,18 +251,27 @@ where
     ))
 }
 
-#[tracing::instrument(name = "delete_user", skip(user_app_service))]
-pub async fn delete<T>(
+#[tracing::instrument(name = "delete_user", skip(user_app_service, token_app_service, token))]
+pub async fn delete<T, U>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
     Path(user_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IUserRepository,
+    U: ITokenRepository,
 {
-    user_app_service.delete(user_id).await.map_err(|e| {
-        let app_err = AppError::from(e);
-        app_err.handle_error("Failed to delete user")
-    })?;
+    let token_data = token_app_service
+        .verify_access_token(token)
+        .await
+        .map_err(|e| AppError::from(e))?;
+
+    // Use the new delete_with_auth method which includes authorization check
+    user_app_service
+        .delete_with_auth(user_id, token_data.claims.sub())
+        .await
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::<()>::new(StatusCode::OK, None, None))
 }
