@@ -1,4 +1,4 @@
-use crate::utils::usecase_error::UsecaseError;
+use super::CategoryUsecaseError;
 use blog_domain::model::{
     categories::{
         category::{Category, NewCategory, UpdateCategory},
@@ -34,7 +34,7 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
         user_id: Uuid,
         category_id: Uuid,
         payload: UpdateCategory,
-    ) -> anyhow::Result<Category> {
+    ) -> Result<Category, CategoryUsecaseError> {
         // check ownership
         let (categories, _) = self
             .repository
@@ -45,22 +45,28 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
                 },
                 Pagination::default(),
             )
-            .await?;
+            .await
+            .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))?;
 
-        let category = categories.first().ok_or(anyhow::anyhow!(
-            UsecaseError::ValidationFailed("Category not found".to_string())
-        ))?;
+        let category = categories
+            .first()
+            .ok_or(CategoryUsecaseError::ValidationFailed(
+                "Category not found".to_string(),
+            ))?;
 
         if category.user_public_id != user_id {
-            return Err(anyhow::anyhow!(UsecaseError::PermissionDenied(
+            return Err(CategoryUsecaseError::PermissionDenied(
                 "You are not the owner of this category".to_string()
-            )));
+            ));
         }
 
-        self.repository.update(category_id, payload).await
+        self.repository
+            .update(category_id, payload)
+            .await
+            .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))
     }
 
-    pub async fn delete(&self, user_id: Uuid, category_id: Uuid) -> anyhow::Result<()> {
+    pub async fn delete(&self, user_id: Uuid, category_id: Uuid) -> Result<(), CategoryUsecaseError> {
         // check ownership
         let (categories, _) = self
             .repository
@@ -71,18 +77,24 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
                 },
                 Pagination::default(),
             )
-            .await?;
+            .await
+            .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))?;
 
-        let category = categories.first().ok_or(anyhow::anyhow!(
-            UsecaseError::ValidationFailed("Category not found".to_string())
-        ))?;
+        let category = categories
+            .first()
+            .ok_or(CategoryUsecaseError::ValidationFailed(
+                "Category not found".to_string(),
+            ))?;
 
         if category.user_public_id != user_id {
-            return Err(anyhow::anyhow!(UsecaseError::PermissionDenied(
+            return Err(CategoryUsecaseError::PermissionDenied(
                 "You are not the owner of this category".to_string()
-            )));
+            ));
         }
 
-        self.repository.delete(category_id).await
+        self.repository
+            .delete(category_id)
+            .await
+            .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))
     }
 }
