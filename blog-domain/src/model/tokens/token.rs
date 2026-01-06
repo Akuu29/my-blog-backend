@@ -107,12 +107,14 @@ impl RefreshTokenClaims {
 #[serde(rename_all = "camelCase")]
 pub struct ApiCredentials {
     access_token: String,
+    user: User,
 }
 
 impl ApiCredentials {
-    pub fn new(access_token: &str) -> Self {
+    pub fn new(access_token: &str, user: User) -> Self {
         Self {
             access_token: access_token.to_string(),
+            user,
         }
     }
 }

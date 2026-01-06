@@ -81,13 +81,13 @@ where
                     .generate_access_token(&user)
                     .map_err(|e| AppError::from(e))?;
 
-                let api_credentials = ApiCredentials::new(&access_token);
-
                 let refresh_token = token_app_service
                     .generate_refresh_token(&user)
                     .map_err(|e| AppError::from(e))?;
                 let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
                 let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
+
+                let api_credentials = ApiCredentials::new(&access_token, user);
 
                 Ok(ApiResponse::new(
                     StatusCode::OK,
@@ -145,13 +145,14 @@ where
             let access_token = token_app_service
                 .generate_access_token(&user)
                 .map_err(|e| AppError::from(e))?;
-            let api_credentials = ApiCredentials::new(&access_token);
 
             let refresh_token = token_app_service
                 .generate_refresh_token(&user)
                 .map_err(|e| AppError::from(e))?;
             let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
             let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
+
+            let api_credentials = ApiCredentials::new(&access_token, user);
 
             Ok(ApiResponse::new(
                 StatusCode::OK,

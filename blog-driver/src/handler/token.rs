@@ -44,7 +44,7 @@ where
             let access_token = token_app_service
                 .generate_access_token(&user)
                 .map_err(|e| AppError::from(e))?;
-            let api_credentials = ApiCredentials::new(&access_token);
+            let api_credentials = ApiCredentials::new(&access_token, user);
 
             Ok(ApiResponse::new(
                 StatusCode::OK,
