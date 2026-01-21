@@ -1,20 +1,29 @@
 use super::CategoryUsecaseError;
-use blog_domain::model::{
-    categories::{
-        category::{Category, NewCategory, UpdateCategory},
-        i_category_repository::{CategoryFilter, ICategoryRepository},
+use blog_domain::model::categories::i_category_repository::CategoryFilter;
+use blog_domain::{
+    model::{
+        categories::{
+            category::{Category, NewCategory, UpdateCategory},
+            i_category_repository::ICategoryRepository,
+        },
+        common::{item_count::ItemCount, pagination::Pagination},
     },
-    common::{item_count::ItemCount, pagination::Pagination},
+    service::categories::CategoryService,
 };
 use uuid::Uuid;
 
 pub struct CategoryAppService<T: ICategoryRepository> {
     repository: T,
+    category_service: CategoryService<T>,
 }
 
 impl<T: ICategoryRepository> CategoryAppService<T> {
     pub fn new(repository: T) -> Self {
-        Self { repository }
+        let category_service = CategoryService::new(repository.clone());
+        Self {
+            repository,
+            category_service,
+        }
     }
 
     pub async fn create(&self, user_id: Uuid, payload: NewCategory) -> anyhow::Result<Category> {
@@ -29,36 +38,16 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
         self.repository.all(category_filter, pagination).await
     }
 
-    pub async fn update(
+    pub async fn update_with_auth(
         &self,
         user_id: Uuid,
         category_id: Uuid,
         payload: UpdateCategory,
     ) -> Result<Category, CategoryUsecaseError> {
-        // check ownership
-        let (categories, _) = self
-            .repository
-            .all(
-                CategoryFilter {
-                    public_id: Some(category_id),
-                    ..Default::default()
-                },
-                Pagination::default(),
-            )
-            .await
-            .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))?;
-
-        let category = categories
-            .first()
-            .ok_or(CategoryUsecaseError::ValidationFailed(
-                "Category not found".to_string(),
-            ))?;
-
-        if category.user_public_id != user_id {
-            return Err(CategoryUsecaseError::PermissionDenied(
-                "You are not the owner of this category".to_string()
-            ));
-        }
+        // Verify category ownership
+        self.category_service
+            .verify_ownership(category_id, user_id)
+            .await?;
 
         self.repository
             .update(category_id, payload)
@@ -66,31 +55,15 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
             .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))
     }
 
-    pub async fn delete(&self, user_id: Uuid, category_id: Uuid) -> Result<(), CategoryUsecaseError> {
-        // check ownership
-        let (categories, _) = self
-            .repository
-            .all(
-                CategoryFilter {
-                    public_id: Some(category_id),
-                    ..Default::default()
-                },
-                Pagination::default(),
-            )
-            .await
-            .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))?;
-
-        let category = categories
-            .first()
-            .ok_or(CategoryUsecaseError::ValidationFailed(
-                "Category not found".to_string(),
-            ))?;
-
-        if category.user_public_id != user_id {
-            return Err(CategoryUsecaseError::PermissionDenied(
-                "You are not the owner of this category".to_string()
-            ));
-        }
+    pub async fn delete_with_auth(
+        &self,
+        user_id: Uuid,
+        category_id: Uuid,
+    ) -> Result<(), CategoryUsecaseError> {
+        // Verify category ownership
+        self.category_service
+            .verify_ownership(category_id, user_id)
+            .await?;
 
         self.repository
             .delete(category_id)

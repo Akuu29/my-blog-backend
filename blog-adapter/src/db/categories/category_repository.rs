@@ -56,6 +56,32 @@ impl CategoryRepository {
 
 #[async_trait]
 impl ICategoryRepository for CategoryRepository {
+    async fn find(&self, category_id: Uuid) -> anyhow::Result<Category> {
+        let category = sqlx::query_as::<_, Category>(
+            r#"
+            SELECT
+                c.public_id,
+                u.public_id AS user_public_id,
+                c.name,
+                c.created_at,
+                c.updated_at
+            FROM categories AS c
+            JOIN users AS u ON c.user_id = u.id
+            WHERE c.public_id = $1
+            ;
+            "#,
+        )
+        .bind(category_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound.into(),
+            e => anyhow::anyhow!(e),
+        })?;
+
+        Ok(category)
+    }
+
     async fn create(&self, user_id: Uuid, payload: NewCategory) -> anyhow::Result<Category> {
         let category = sqlx::query_as::<_, Category>(
             r#"
@@ -443,6 +469,38 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
+    async fn test_find_category() {
+        let (_, repository, user_uuid) = setup().await;
+        let mut guard = TestCategoryGuard::new(&repository);
+
+        let created_category = create_test_category(
+            &repository,
+            user_uuid,
+            &format!("find test {}", Uuid::new_v4()),
+        )
+        .await;
+        guard.track(created_category.public_id);
+
+        let found_category = repository.find(created_category.public_id).await.unwrap();
+
+        assert_eq!(found_category.public_id, created_category.public_id);
+        assert_eq!(found_category.user_public_id, user_uuid);
+        assert_eq!(found_category.name, created_category.name);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_find_category_not_found() {
+        let (_, repository, _) = setup().await;
+
+        let non_existent_id = Uuid::new_v4();
+        let result = repository.find(non_existent_id).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
     async fn test_delete_category() {
         let (_, repository, user_uuid) = setup().await;
         let mut guard = TestCategoryGuard::new(&repository);
@@ -458,18 +516,7 @@ mod test {
         repository.delete(category.public_id).await.unwrap();
 
         // Verify deletion by trying to find it
-        let filter = CategoryFilter {
-            public_id: Some(category.public_id),
-            name: None,
-            user_public_id: None,
-        };
-        let pagination = Pagination {
-            per_page: 10,
-            cursor: None,
-            offset: None,
-        };
-        let (categories, _) = repository.all(filter, pagination).await.unwrap();
-
-        assert!(categories.is_empty());
+        let result = repository.find(category.public_id).await;
+        assert!(result.is_err());
     }
 }

@@ -96,13 +96,13 @@ where
     T: ITagRepository,
     U: ITokenRepository,
 {
-    token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
         .map_err(|e| AppError::from(e))?;
 
     tag_app_service
-        .delete(tag_id)
+        .delete_with_auth(access_token_data.claims.sub(), tag_id)
         .await
         .map_err(|e| AppError::from(e))?;
 

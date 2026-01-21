@@ -12,7 +12,8 @@ use axum::{
 use blog_adapter::utils::repository_error::RepositoryError;
 use blog_app::service::{
     articles::ArticleUsecaseError, categories::CategoryUsecaseError, comments::CommentUsecaseError,
-    images::ImageUsecaseError, tokens::error::TokenServiceError, users::UserUsecaseError,
+    images::ImageUsecaseError, tags::TagUsecaseError, tokens::error::TokenServiceError,
+    users::UserUsecaseError,
 };
 use blog_domain::error::{ErrorCategory, ErrorMetadata};
 use thiserror::Error;
@@ -47,6 +48,9 @@ pub enum AppError {
 
     #[error(transparent)]
     Category(#[from] CategoryUsecaseError),
+
+    #[error(transparent)]
+    Tag(#[from] TagUsecaseError),
 
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -116,6 +120,7 @@ impl IntoResponse for AppError {
             Self::Comment(e) => extract_error_info(e),
             Self::Article(e) => extract_error_info(e),
             Self::Category(e) => extract_error_info(e),
+            Self::Tag(e) => extract_error_info(e),
             Self::Repository(e) => extract_error_info(e),
         };
 
@@ -154,6 +159,9 @@ impl From<anyhow::Error> for AppError {
             return Self::Unexpected(err.to_string());
         }
         if let Some(err) = e.downcast_ref::<CategoryUsecaseError>() {
+            return Self::Unexpected(err.to_string());
+        }
+        if let Some(err) = e.downcast_ref::<TagUsecaseError>() {
             return Self::Unexpected(err.to_string());
         }
         if let Some(err) = e.downcast_ref::<RepositoryError>() {
