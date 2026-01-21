@@ -113,7 +113,7 @@ where
     let user_id = access_token_data.claims.sub();
 
     let category = category_app_service
-        .update(user_id, category_id, payload)
+        .update_with_auth(user_id, category_id, payload)
         .await
         .map_err(|e| AppError::from(e))?;
 
@@ -146,7 +146,7 @@ where
     let user_id = access_token_data.claims.sub();
 
     category_app_service
-        .delete(user_id, category_id)
+        .delete_with_auth(user_id, category_id)
         .await
         .map_err(|e| AppError::from(e))?;
 
