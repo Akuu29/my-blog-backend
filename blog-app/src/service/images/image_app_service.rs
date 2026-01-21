@@ -47,7 +47,13 @@ where
             .repository
             .create(new_image)
             .await
-            .map_err(|e| ImageUsecaseError::RepositoryError(e.to_string()))?;
+            .map_err(|e| {
+                if e.to_string() == "NotFound" {
+                    ImageUsecaseError::NotFound
+                } else {
+                    ImageUsecaseError::RepositoryError(e.to_string())
+                }
+            })?;
         let image_url = match image.storage_type.to_string().as_str() {
             "database" => {
                 format!(
@@ -70,7 +76,13 @@ where
             .repository
             .all(filter)
             .await
-            .map_err(|e| ImageUsecaseError::RepositoryError(e.to_string()))?;
+            .map_err(|e| {
+                if e.to_string() == "NotFound" {
+                    ImageUsecaseError::NotFound
+                } else {
+                    ImageUsecaseError::RepositoryError(e.to_string())
+                }
+            })?;
 
         for image in images.iter_mut() {
             let image_url = match image.storage_type.to_string().as_str() {
@@ -95,7 +107,13 @@ where
         self.repository
             .find_data(image_id)
             .await
-            .map_err(|e| ImageUsecaseError::RepositoryError(e.to_string()))
+            .map_err(|e| {
+                if e.to_string() == "NotFound" {
+                    ImageUsecaseError::NotFound
+                } else {
+                    ImageUsecaseError::RepositoryError(e.to_string())
+                }
+            })
     }
 
     pub async fn delete_with_auth(
@@ -111,7 +129,13 @@ where
         self.repository
             .delete(image_id)
             .await
-            .map_err(|e| ImageUsecaseError::RepositoryError(e.to_string()))?;
+            .map_err(|e| {
+                if e.to_string() == "NotFound" {
+                    ImageUsecaseError::NotFound
+                } else {
+                    ImageUsecaseError::RepositoryError(e.to_string())
+                }
+            })?;
 
         Ok(())
     }
