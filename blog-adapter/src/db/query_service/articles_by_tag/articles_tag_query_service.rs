@@ -28,6 +28,9 @@ impl ArticlesByTagQueryService {
         if let Some(user_public_id) = filter.user_public_id {
             qb.push(" AND u.public_id = ").push_bind(user_public_id);
         }
+        if let Some(article_status) = filter.article_status {
+            qb.push(" AND a.status = ").push_bind(article_status);
+        }
     }
 }
 
