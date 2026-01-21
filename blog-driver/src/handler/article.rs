@@ -138,7 +138,7 @@ where
     let user_id = access_token_data.claims.sub();
 
     let article = article_app_service
-        .update(user_id, article_id, payload)
+        .update_with_auth(user_id, article_id, payload)
         .await
         .map_err(|e| AppError::from(e))?;
 
@@ -172,7 +172,7 @@ where
     let user_id = access_token_data.claims.sub();
 
     article_app_service
-        .delete(user_id, article_id)
+        .delete_with_auth(user_id, article_id)
         .await
         .map(|_| ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
         .map_err(|e| AppError::from(e))?;
@@ -204,7 +204,7 @@ where
     let user_id = access_token_data.claims.sub();
 
     article_app_service
-        .attach_tags(user_id, article_id, tag_ids)
+        .attach_tags_with_auth(user_id, article_id, tag_ids)
         .await
         .map_err(|e| AppError::from(e))?;
 
