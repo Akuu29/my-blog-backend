@@ -5,8 +5,10 @@
             "Bash(sudo:*)",
             "Bash(git reset:*)",
             "Bash(git rebase:*)",
-            "Read(.env:*)",
-            "Write(.env:*)"
+            "Read(.env)",
+            "Read(.env.*)",
+            "Write(.env)",
+            "Write(.env.*)"
         ]
     }
 }
