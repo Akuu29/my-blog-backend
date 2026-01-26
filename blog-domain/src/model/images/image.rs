@@ -94,7 +94,9 @@ fn validate_data_dimension(data: &[u8]) -> Result<(), ValidationError> {
     const MAX_IMAGE_WIDTH: u32 = 1920;
     const MAX_IMAGE_HEIGHT: u32 = 1080;
 
-    let kind = infer::get(data).unwrap();
+    // infer::get() returns Option<Type>, convert None to ValidationError
+    let kind = infer::get(data).ok_or_else(|| ValidationError::new("UNRECOGNIZED_FILE_TYPE"))?;
+
     let format = match kind.extension() {
         "jpg" | "jpeg" => ImageFormat::Jpeg,
         "png" => ImageFormat::Png,
@@ -103,7 +105,10 @@ fn validate_data_dimension(data: &[u8]) -> Result<(), ValidationError> {
         _ => return Err(ValidationError::new("INVALID_MIME_TYPE")),
     };
 
-    let image = image::load_from_memory_with_format(data, format).unwrap();
+    // image::load_from_memory_with_format() returns Result, convert Err to ValidationError
+    let image = image::load_from_memory_with_format(data, format)
+        .map_err(|_| ValidationError::new("CORRUPTED_IMAGE_DATA"))?;
+
     if image.width() > MAX_IMAGE_WIDTH || image.height() > MAX_IMAGE_HEIGHT {
         return Err(ValidationError::new("INVALID_IMAGE_DIMENSION"));
     }
