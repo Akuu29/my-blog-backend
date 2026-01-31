@@ -12,6 +12,11 @@ use blog_domain::model::images::image::{NewImage, StorageType};
 use uuid::Uuid;
 use validator::Validate;
 
+fn bad_request_error(code: ErrorCode, message: String, status: StatusCode) -> ApiResponse<String> {
+    let err = ErrorResponse::new(code, message);
+    ApiResponse::new(status, Some(serde_json::to_string(&err).unwrap()), None)
+}
+
 #[derive(Debug)]
 pub struct ValidatedImage(pub NewImage);
 
@@ -24,7 +29,14 @@ where
 
     #[tracing::instrument(name = "validated_image", skip(state))]
     async fn from_request(req: Request, state: &B) -> Result<Self, Self::Rejection> {
-        let mut multipart = Multipart::from_request(req, state).await.unwrap();
+        let mut multipart = Multipart::from_request(req, state).await.map_err(|e| {
+            tracing::error!(error.kind="Unexpected", error=%e);
+            bad_request_error(
+                ErrorCode::InvalidInput,
+                "Invalid multipart request".to_string(),
+                StatusCode::BAD_REQUEST,
+            )
+        })?;
 
         let mut file_data = Vec::default();
         let mut filename = None;
@@ -114,6 +126,14 @@ where
             Some(id) => id.parse::<Uuid>().map_err(|e| {
                 tracing::error!(error.kind="Unexpected", errror=%e.to_string());
                 let err_msg = ErrorResponse::new(
+        let filename = filename.ok_or_else(|| {
+            bad_request_error(
+                ErrorCode::InvalidInput,
+                "filename is required".to_string(),
+                StatusCode::BAD_REQUEST,
+            )
+        })?;
+
                     ErrorCode::InvalidInput,
                     "Failed to parse articleId".to_string(),
                 );
@@ -138,7 +158,7 @@ where
         };
 
         let new_image = NewImage {
-            name: filename.unwrap(),
+            name: filename,
             mime_type: kind.mime_type().to_string(),
             data: file_data,
             url: None,
