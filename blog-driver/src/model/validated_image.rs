@@ -43,30 +43,20 @@ where
         let mut article_id = None;
 
         while let Some(field) = multipart.next_field().await.map_err(|e| {
-            tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-            let err_res_body = ErrorResponse::new(
+            tracing::error!(error.kind="Unexpected", error=%e.to_string());
+            bad_request_error(
                 ErrorCode::InvalidInput,
                 format!("Failed to process multipart form data: {}", e),
-            );
-            ApiResponse::new(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&err_res_body).unwrap()),
-                None,
             )
         })? {
             let name = field
                 .name()
                 .ok_or_else(|| {
-                    ApiResponse::new(
+                    bad_request_error(
+                        ErrorCode::InvalidInput,
+                        "Missing field name".to_string(),
                         StatusCode::BAD_REQUEST,
-                        Some(
-                            serde_json::to_string(&ErrorResponse::new(
-                                ErrorCode::InvalidInput,
-                                "Missing field name".to_string(),
-                            ))
-                            .unwrap(),
-                        ),
-                        None,
                     )
                 })?
                 .to_string();
@@ -74,44 +64,32 @@ where
             match name.as_str() {
                 "file" => {
                     let data = field.bytes().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-                        let err_msg = ErrorResponse::new(
+                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                        bad_request_error(
                             ErrorCode::InvalidInput,
                             "Failed to read file data".to_string(),
-                        );
-                        ApiResponse::new(
                             StatusCode::BAD_REQUEST,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
                         )
                     })?;
                     file_data = data.to_vec();
                 }
                 "filename" => {
                     filename = Some(field.text().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-                        let err_msg = ErrorResponse::new(
+                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                        bad_request_error(
                             ErrorCode::InvalidInput,
                             "Failed to read filename".to_string(),
-                        );
-                        ApiResponse::new(
                             StatusCode::BAD_REQUEST,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
                         )
                     })?);
                 }
                 "articleId" => {
                     article_id = Some(field.text().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-                        let err_msg = ErrorResponse::new(
+                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                        bad_request_error(
                             ErrorCode::InvalidInput,
                             "Failed to read articleId".to_string(),
-                        );
-                        ApiResponse::new(
                             StatusCode::BAD_REQUEST,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
                         )
                     })?);
                 }
@@ -119,13 +97,12 @@ where
             }
         }
 
-        let kind =
-            infer::get(&file_data).ok_or(ApiResponse::new(StatusCode::BAD_REQUEST, None, None))?;
+        let kind = infer::get(&file_data).ok_or(bad_request_error(
+            ErrorCode::InvalidInput,
+            "file kind is required".to_string(),
+            StatusCode::BAD_REQUEST,
+        ))?;
 
-        let article_public_id = match article_id.as_deref() {
-            Some(id) => id.parse::<Uuid>().map_err(|e| {
-                tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-                let err_msg = ErrorResponse::new(
         let filename = filename.ok_or_else(|| {
             bad_request_error(
                 ErrorCode::InvalidInput,
@@ -134,28 +111,23 @@ where
             )
         })?;
 
-                    ErrorCode::InvalidInput,
-                    "Failed to parse articleId".to_string(),
-                );
-                ApiResponse::new(
-                    StatusCode::BAD_REQUEST,
-                    Some(serde_json::to_string(&err_msg).unwrap()),
-                    None,
-                )
-            })?,
-            None => {
-                tracing::error!(error.kind = "Unexpected", errror = "articleId is required");
-                let err_msg = ErrorResponse::new(
+        let article_public_id = article_id
+            .ok_or_else(|| {
+                bad_request_error(
                     ErrorCode::InvalidInput,
                     "articleId is required".to_string(),
-                );
-                return Err(ApiResponse::new(
                     StatusCode::BAD_REQUEST,
-                    Some(serde_json::to_string(&err_msg).unwrap()),
-                    None,
-                ));
-            }
-        };
+                )
+            })?
+            .parse::<Uuid>()
+            .map_err(|e| {
+                tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                bad_request_error(
+                    ErrorCode::InvalidInput,
+                    "Failed to parse articleId".to_string(),
+                    StatusCode::BAD_REQUEST,
+                )
+            })?;
 
         let new_image = NewImage {
             name: filename,
