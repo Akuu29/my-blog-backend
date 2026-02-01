@@ -24,6 +24,8 @@ use blog_domain::model::{
         token_string::{AccessTokenString, IdTokenString},
     },
     users::{
+        email_cipher::EmailCipher,
+        email_hash::EmailHash,
         i_user_repository::{IUserRepository, UserFilter},
         user::{NewUser, UpdateUser},
     },
@@ -66,10 +68,16 @@ where
         Ok(_) => Err(AppError::Unexpected("User already exists".to_string())),
         Err(e) => match &e {
             UserUsecaseError::RepositoryError(_) => {
+                let email = id_token_claims.email();
+                let email_cipher = EmailCipher::from_plaintext(&email)
+                    .map_err(|e| AppError::Unexpected(e.to_string()))?;
+                let email_hash = EmailHash::from_plaintext(&email);
+
                 let new_user = NewUser::new(
                     &provider_name,
                     &id_token_claims.sub(),
-                    &id_token_claims.email(),
+                    email_cipher,
+                    email_hash,
                     id_token_claims.email_verified(),
                 );
                 let user = user_app_service

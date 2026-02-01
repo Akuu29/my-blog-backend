@@ -274,7 +274,11 @@ mod test {
     use super::*;
     use blog_domain::model::{
         common::pagination::Pagination,
-        users::user::{NewUser, UpdateUser, UserRole},
+        users::{
+            email_cipher::EmailCipher,
+            email_hash::EmailHash,
+            user::{NewUser, UpdateUser, UserRole},
+        },
     };
     use dotenv::dotenv;
     use serial_test::serial;
@@ -306,10 +310,13 @@ mod test {
 
     async fn create_test_user(repository: &UserRepository, name_suffix: &str) -> User {
         let unique_email = format!("test-{}@example.com", name_suffix);
+        let email_cipher = EmailCipher::from_plaintext(&unique_email).unwrap();
+        let email_hash = EmailHash::from_plaintext(&unique_email);
         let new_user = NewUser::new(
-            "test-idp", // Uses "test-idp" identity provider created in setup
+            "test-idp",
             &format!("test-idp-sub-{}", name_suffix),
-            &unique_email,
+            email_cipher,
+            email_hash,
             true,
         );
         repository.create(new_user).await.unwrap()
@@ -361,10 +368,13 @@ mod test {
         let mut guard = TestUserGuard::new(&repository);
 
         let unique_email = format!("create-{}@example.com", Uuid::new_v4());
+        let email_cipher = EmailCipher::from_plaintext(&unique_email).unwrap();
+        let email_hash = EmailHash::from_plaintext(&unique_email);
         let new_user = NewUser::new(
             "test-idp",
             &format!("test-idp-sub-{}", Uuid::new_v4()),
-            &unique_email,
+            email_cipher,
+            email_hash,
             true,
         );
 
@@ -399,7 +409,9 @@ mod test {
 
         let provider_sub = format!("test-idp-sub-{}", Uuid::new_v4());
         let unique_email = format!("identity-{}@example.com", Uuid::new_v4());
-        let new_user = NewUser::new("test-idp", &provider_sub, &unique_email, true);
+        let email_cipher = EmailCipher::from_plaintext(&unique_email).unwrap();
+        let email_hash = EmailHash::from_plaintext(&unique_email);
+        let new_user = NewUser::new("test-idp", &provider_sub, email_cipher, email_hash, true);
 
         let user = repository.create(new_user).await.unwrap();
         guard.track(user.public_id);
