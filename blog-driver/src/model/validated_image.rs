@@ -12,7 +12,7 @@ use blog_domain::model::images::image::{NewImage, StorageType};
 use uuid::Uuid;
 use validator::Validate;
 
-fn bad_request_error(code: ErrorCode, message: String, status: StatusCode) -> ApiResponse<String> {
+fn api_error_response(code: ErrorCode, message: String, status: StatusCode) -> ApiResponse<String> {
     let err = ErrorResponse::new(code, message);
     ApiResponse::new(status, Some(serde_json::to_string(&err).unwrap()), None)
 }
@@ -31,7 +31,7 @@ where
     async fn from_request(req: Request, state: &B) -> Result<Self, Self::Rejection> {
         let mut multipart = Multipart::from_request(req, state).await.map_err(|e| {
             tracing::error!(error.kind="Unexpected", error=%e);
-            bad_request_error(
+            api_error_response(
                 ErrorCode::InvalidInput,
                 "Invalid multipart request".to_string(),
                 StatusCode::BAD_REQUEST,
@@ -44,7 +44,7 @@ where
 
         while let Some(field) = multipart.next_field().await.map_err(|e| {
             tracing::error!(error.kind="Unexpected", error=%e.to_string());
-            bad_request_error(
+            api_error_response(
                 ErrorCode::InvalidInput,
                 format!("Failed to process multipart form data: {}", e),
                 StatusCode::BAD_REQUEST,
@@ -53,7 +53,7 @@ where
             let name = field
                 .name()
                 .ok_or_else(|| {
-                    bad_request_error(
+                    api_error_response(
                         ErrorCode::InvalidInput,
                         "Missing field name".to_string(),
                         StatusCode::BAD_REQUEST,
@@ -65,7 +65,7 @@ where
                 "file" => {
                     let data = field.bytes().await.map_err(|e| {
                         tracing::error!(error.kind="Unexpected", error=%e.to_string());
-                        bad_request_error(
+                        api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read file data".to_string(),
                             StatusCode::BAD_REQUEST,
@@ -76,7 +76,7 @@ where
                 "filename" => {
                     filename = Some(field.text().await.map_err(|e| {
                         tracing::error!(error.kind="Unexpected", error=%e.to_string());
-                        bad_request_error(
+                        api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read filename".to_string(),
                             StatusCode::BAD_REQUEST,
@@ -86,7 +86,7 @@ where
                 "articleId" => {
                     article_id = Some(field.text().await.map_err(|e| {
                         tracing::error!(error.kind="Unexpected", error=%e.to_string());
-                        bad_request_error(
+                        api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read articleId".to_string(),
                             StatusCode::BAD_REQUEST,
@@ -97,14 +97,14 @@ where
             }
         }
 
-        let kind = infer::get(&file_data).ok_or(bad_request_error(
+        let kind = infer::get(&file_data).ok_or(api_error_response(
             ErrorCode::InvalidInput,
             "file kind is required".to_string(),
             StatusCode::BAD_REQUEST,
         ))?;
 
         let filename = filename.ok_or_else(|| {
-            bad_request_error(
+            api_error_response(
                 ErrorCode::InvalidInput,
                 "filename is required".to_string(),
                 StatusCode::BAD_REQUEST,
@@ -113,7 +113,7 @@ where
 
         let article_public_id = article_id
             .ok_or_else(|| {
-                bad_request_error(
+                api_error_response(
                     ErrorCode::InvalidInput,
                     "articleId is required".to_string(),
                     StatusCode::BAD_REQUEST,
@@ -122,7 +122,7 @@ where
             .parse::<Uuid>()
             .map_err(|e| {
                 tracing::error!(error.kind="Unexpected", error=%e.to_string());
-                bad_request_error(
+                api_error_response(
                     ErrorCode::InvalidInput,
                     "Failed to parse articleId".to_string(),
                     StatusCode::BAD_REQUEST,
