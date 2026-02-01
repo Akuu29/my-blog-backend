@@ -1,9 +1,6 @@
 use crate::{
-    model::{
-        api_response::ApiResponse,
-        error_message::{ErrorMessage, ErrorMessageKind},
-    },
-    utils::error_log_kind::ErrorLogKind,
+    error::{ErrorCode, ErrorResponse},
+    model::api_response::ApiResponse,
 };
 use axum::extract::Multipart;
 use axum::{
@@ -34,14 +31,14 @@ where
         let mut article_id = None;
 
         while let Some(field) = multipart.next_field().await.map_err(|e| {
-            tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror=%e.to_string());
-            let err_msg = ErrorMessage::new(
-                ErrorMessageKind::BadRequest,
+            tracing::error!(error.kind="Unexpected", errror=%e.to_string());
+            let err_res_body = ErrorResponse::new(
+                ErrorCode::InvalidInput,
                 format!("Failed to process multipart form data: {}", e),
             );
             ApiResponse::new(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&err_msg).unwrap()),
+                Some(serde_json::to_string(&err_res_body).unwrap()),
                 None,
             )
         })? {
@@ -51,8 +48,8 @@ where
                     ApiResponse::new(
                         StatusCode::BAD_REQUEST,
                         Some(
-                            serde_json::to_string(&ErrorMessage::new(
-                                ErrorMessageKind::BadRequest,
+                            serde_json::to_string(&ErrorResponse::new(
+                                ErrorCode::InvalidInput,
                                 "Missing field name".to_string(),
                             ))
                             .unwrap(),
@@ -65,9 +62,9 @@ where
             match name.as_str() {
                 "file" => {
                     let data = field.bytes().await.map_err(|e| {
-                        tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror=%e.to_string());
-                        let err_msg = ErrorMessage::new(
-                            ErrorMessageKind::BadRequest,
+                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
+                        let err_msg = ErrorResponse::new(
+                            ErrorCode::InvalidInput,
                             "Failed to read file data".to_string(),
                         );
                         ApiResponse::new(
@@ -80,9 +77,9 @@ where
                 }
                 "filename" => {
                     filename = Some(field.text().await.map_err(|e| {
-                        tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror=%e.to_string());
-                        let err_msg = ErrorMessage::new(
-                            ErrorMessageKind::BadRequest,
+                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
+                        let err_msg = ErrorResponse::new(
+                            ErrorCode::InvalidInput,
                             "Failed to read filename".to_string(),
                         );
                         ApiResponse::new(
@@ -94,9 +91,9 @@ where
                 }
                 "articleId" => {
                     article_id = Some(field.text().await.map_err(|e| {
-                        tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror=%e.to_string());
-                        let err_msg = ErrorMessage::new(
-                            ErrorMessageKind::BadRequest,
+                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
+                        let err_msg = ErrorResponse::new(
+                            ErrorCode::InvalidInput,
                             "Failed to read articleId".to_string(),
                         );
                         ApiResponse::new(
@@ -115,9 +112,9 @@ where
 
         let article_public_id = match article_id.as_deref() {
             Some(id) => id.parse::<Uuid>().map_err(|e| {
-                tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror=%e.to_string());
-                let err_msg = ErrorMessage::new(
-                    ErrorMessageKind::BadRequest,
+                tracing::error!(error.kind="Unexpected", errror=%e.to_string());
+                let err_msg = ErrorResponse::new(
+                    ErrorCode::InvalidInput,
                     "Failed to parse articleId".to_string(),
                 );
                 ApiResponse::new(
@@ -127,9 +124,9 @@ where
                 )
             })?,
             None => {
-                tracing::error!(error.kind=%ErrorLogKind::Unexpected, errror="articleId is required");
-                let err_msg = ErrorMessage::new(
-                    ErrorMessageKind::BadRequest,
+                tracing::error!(error.kind = "Unexpected", errror = "articleId is required");
+                let err_msg = ErrorResponse::new(
+                    ErrorCode::InvalidInput,
                     "articleId is required".to_string(),
                 );
                 return Err(ApiResponse::new(
@@ -150,47 +147,34 @@ where
         };
 
         new_image.validate().map_err(|e| {
-            let err_log_msg = e.to_string();
-            tracing::error!(error.message=%err_log_msg);
+            tracing::error!(error.kind ="Validation", error.message=%e.to_string());
 
-            let err_msg = ErrorMessage::new(
-                ErrorMessageKind::Validation,
-                "Failed to validate image".to_string(),
-            );
-
-            let field_errors = e.field_errors();
-            for field in field_errors.iter() {
-                for error in field.1.iter() {
-                    match error.code.as_ref() {
-                        "INVALID_MIME_TYPE" => {
-                            return ApiResponse::new(
-                                StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                                Some(serde_json::to_string(&err_msg).unwrap()),
-                                None,
-                            );
-                        }
-                        "INVALID_DATA_LENGTH" => {
-                            return ApiResponse::new(
-                                StatusCode::PAYLOAD_TOO_LARGE,
-                                Some(serde_json::to_string(&err_msg).unwrap()),
-                                None,
-                            );
-                        }
-                        "INVALID_IMAGE_DIMENSION" => {
-                            return ApiResponse::new(
-                                StatusCode::UNPROCESSABLE_ENTITY,
-                                Some(serde_json::to_string(&err_msg).unwrap()),
-                                None,
-                            );
-                        }
-                        _ => return ApiResponse::new(StatusCode::BAD_REQUEST, None, None),
-                    }
-                }
-            }
+            let (status_code, err_msg) = e
+                .field_errors()
+                .iter()
+                .flat_map(|(_, errors)| errors.iter())
+                .next()
+                .map(|err| match err.code.as_ref() {
+                    "INVALID_MIME_TYPE" => (
+                        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                        "Unsupported image format",
+                    ),
+                    "INVALID_DATA_LENGTH" => (
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        "Image file size exceeds the maximum allowed",
+                    ),
+                    "INVALID_IMAGE_DIMENSION" => (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "Image dimensions do not meet requirements",
+                    ),
+                    _ => (StatusCode::BAD_REQUEST, "Invalid image"),
+                })
+                .unwrap_or((StatusCode::BAD_REQUEST, "Invalid image"));
+            let res_body = ErrorResponse::new(ErrorCode::ValidationError, err_msg);
 
             ApiResponse::new(
-                StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&err_msg).unwrap()),
+                status_code,
+                Some(serde_json::to_string(&res_body).unwrap()),
                 None,
             )
         })?;

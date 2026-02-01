@@ -2,7 +2,7 @@
 
 dev:
 	MASTER_KEY='${shell openssl rand -base64 64}' \
-	cargo watch -x run
+	RUST_LOG=info cargo watch -x run
 
 run-local-container:
 	docker network create my-blog-network || true

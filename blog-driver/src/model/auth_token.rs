@@ -1,16 +1,13 @@
 use crate::{
-    model::{
-        api_response::ApiResponse,
-        error_message::{ErrorMessage, ErrorMessageKind},
-    },
-    utils::error_log_kind::ErrorLogKind,
+    error::{ErrorCode, ErrorResponse},
+    model::api_response::ApiResponse,
 };
 use axum::{
     async_trait,
     extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
+    http::{StatusCode, request::Parts},
 };
-use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
+use axum_extra::headers::{Authorization, HeaderMapExt, authorization::Bearer};
 use blog_domain::model::tokens::token_string::TokenString;
 
 pub struct AuthToken<T>(pub T);
@@ -34,14 +31,13 @@ where
                 Ok(AuthToken(token_instance))
             }
             _ => {
-                let err_msg_msg = "No token provided";
-                tracing::error!(error.kind=%ErrorLogKind::Authentication, error.message=%err_msg_msg);
+                let err_msg = "No token provided";
+                tracing::error!(error.kind="Authentication", error.message=%err_msg);
 
-                let err_msg =
-                    ErrorMessage::new(ErrorMessageKind::Unauthorized, err_msg_msg.to_string());
+                let err_res_body = ErrorResponse::new(ErrorCode::Unauthorized, err_msg);
                 Err(ApiResponse::new(
-                    StatusCode::BAD_REQUEST,
-                    Some(serde_json::to_string(&err_msg).unwrap()),
+                    StatusCode::UNAUTHORIZED,
+                    Some(serde_json::to_string(&err_res_body).unwrap()),
                     None,
                 ))
             }

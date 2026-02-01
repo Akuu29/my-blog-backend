@@ -9,7 +9,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 #[serde_as]
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CategoryFilter {
     #[serde_as(as = "Option<DisplayFromStr>")]
@@ -25,6 +25,7 @@ pub struct CategoryFilter {
 #[async_trait]
 pub trait ICategoryRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
     async fn create(&self, user_id: Uuid, payload: NewCategory) -> anyhow::Result<Category>;
+    async fn find(&self, category_id: Uuid) -> anyhow::Result<Category>;
     async fn all(
         &self,
         category_filter: CategoryFilter,

@@ -89,6 +89,7 @@ impl IArticleRepository for ArticleRepository {
             RIGHT JOIN usr ON TRUE
             RETURNING
                 public_id,
+                $5 AS user_public_id,
                 title,
                 body,
                 status,
@@ -117,6 +118,7 @@ impl IArticleRepository for ArticleRepository {
             r#"
             SELECT
                 a.public_id,
+                u.public_id as user_public_id,
                 a.title,
                 a.body,
                 a.status,
@@ -126,14 +128,16 @@ impl IArticleRepository for ArticleRepository {
             FROM articles AS a
             LEFT JOIN categories AS c
             ON a.category_id = c.id
-            WHERE a.public_id = 
+            LEFT JOIN users AS u
+            ON a.user_id = u.id
+            WHERE a.public_id =
             "#,
         );
 
         qb.push_bind(article_id);
 
         if let Some(user_id) = article_filter.user_id {
-            qb.push(" AND a.user_id = ").push_bind(user_id);
+            qb.push(" AND u.public_id = ").push_bind(user_id);
         }
 
         if let Some(status) = article_filter.status {
@@ -162,6 +166,7 @@ impl IArticleRepository for ArticleRepository {
             r#"
             SELECT
                 a.public_id,
+                u.public_id AS user_public_id,
                 a.title,
                 a.body,
                 a.status,
@@ -250,6 +255,7 @@ impl IArticleRepository for ArticleRepository {
             WHERE public_id = $5
             RETURNING
                 public_id,
+                $6 AS user_public_id,
                 title,
                 body,
                 status,
@@ -272,6 +278,7 @@ impl IArticleRepository for ArticleRepository {
         .bind(update_article.status.unwrap_or(pre_payload.status))
         .bind(update_article.category_public_id)
         .bind(article_id)
+        .bind(pre_payload.user_public_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -351,308 +358,462 @@ impl IArticleRepository for ArticleRepository {
 #[cfg(feature = "database-test")]
 mod test {
     use super::*;
-    use blog_domain::model::articles::article::ArticleStatus;
+    use blog_domain::model::{
+        articles::{article::ArticleStatus, i_article_repository::ArticleFilter},
+        common::pagination::Pagination,
+    };
     use dotenv::dotenv;
+    use serial_test::serial;
     use sqlx::{PgPool, types::Uuid};
 
-    #[tokio::test]
-    async fn test_article_repository_for_db() {
+    // Test helper functions
+    async fn setup() -> (PgPool, ArticleRepository, Uuid) {
         dotenv().ok();
         let database_url = std::env::var("DATABASE_URL").expect("undefined DATABASE_URL");
         let pool = PgPool::connect(&database_url).await.expect(&format!(
             "failed to connect to database, url is {}",
             database_url
         ));
-        let repository = ArticleRepository::new(pool);
+        let repository = ArticleRepository::new(pool.clone());
         let user_id =
             Uuid::parse_str(&std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID"))
                 .expect("invalid TEST_USER_ID");
-        // create
+        (pool, repository, user_id)
+    }
+
+    async fn create_test_article(
+        repository: &ArticleRepository,
+        user_id: Uuid,
+        title: &str,
+        body: &str,
+        status: ArticleStatus,
+    ) -> Article {
         let payload = NewArticle {
-            title: "title".to_string(),
-            body: "body".to_string(),
-            status: ArticleStatus::Draft,
-            category_id: Some(1),
+            title: Some(title.to_string()),
+            body: Some(body.to_string()),
+            status,
+            category_public_id: None,
         };
+        repository.create(user_id, payload).await.unwrap()
+    }
+
+    struct TestArticleGuard {
+        pool: PgPool,
+        article_repository: ArticleRepository,
+        article_ids: Vec<Uuid>,
+        tag_ids: Vec<Uuid>,
+        runtime_handle: tokio::runtime::Handle,
+    }
+
+    impl TestArticleGuard {
+        fn new(pool: &PgPool, article_repository: &ArticleRepository) -> Self {
+            Self {
+                pool: pool.clone(),
+                article_repository: article_repository.clone(),
+                article_ids: Vec::new(),
+                tag_ids: Vec::new(),
+                runtime_handle: tokio::runtime::Handle::current(),
+            }
+        }
+
+        fn track_article(&mut self, article_id: Uuid) {
+            self.article_ids.push(article_id);
+        }
+
+        fn track_tag(&mut self, tag_id: Uuid) {
+            self.tag_ids.push(tag_id);
+        }
+    }
+
+    impl Drop for TestArticleGuard {
+        fn drop(&mut self) {
+            // Clone the data needed for cleanup
+            let article_repository = self.article_repository.clone();
+            let article_ids = self.article_ids.clone();
+            let tag_ids = self.tag_ids.clone();
+            let handle = self.runtime_handle.clone();
+            let pool = self.pool.clone();
+
+            // Use block_in_place to allow blocking in async context
+            // This tells the runtime: "I'm about to block, please move other tasks to different threads"
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                tokio::task::block_in_place(|| {
+                    handle.block_on(async move {
+                        // Cleanup test articles
+                        for article_id in &article_ids {
+                            let _ = article_repository.delete(*article_id).await;
+                        }
+
+                        // Cleanup test tags
+                        for tag_id in &tag_ids {
+                            let _ = sqlx::query(
+                                r#"
+                                    DELETE FROM tags
+                                    WHERE public_id = $1
+                                    ;
+                                    "#,
+                            )
+                            .bind(tag_id)
+                            .execute(&pool)
+                            .await;
+                        }
+                    });
+                });
+            }));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_create_article() {
+        let (pool, repository, user_id) = setup().await;
+        let mut guard = TestArticleGuard::new(&pool, &repository);
+
+        let unique_title = format!("test title {}", Uuid::new_v4());
+        let payload = NewArticle {
+            title: Some(unique_title.clone()),
+            body: Some("test body".to_string()),
+            status: ArticleStatus::Draft,
+            category_public_id: None,
+        };
+
         let article = repository.create(user_id, payload.clone()).await.unwrap();
+        guard.track_article(article.public_id);
+
         assert_eq!(article.title, payload.title);
         assert_eq!(article.body, payload.body);
         assert_eq!(article.status, payload.status);
+        assert_eq!(article.user_public_id, user_id);
+    }
 
-        // find with filter
-        let article = repository
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_find_article() {
+        let (pool, repository, user_id) = setup().await;
+        let mut guard = TestArticleGuard::new(&pool, &repository);
+
+        let unique_title = format!("test title {}", Uuid::new_v4());
+        let article = create_test_article(
+            &repository,
+            user_id,
+            &unique_title,
+            "test find body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article.public_id);
+
+        let found_article = repository
+            .find(article.public_id, ArticleFilter::default())
+            .await
+            .unwrap();
+
+        assert_eq!(found_article.public_id, article.public_id);
+        assert_eq!(found_article.title, article.title);
+        assert_eq!(found_article.body, article.body);
+        assert_eq!(found_article.status, article.status);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_find_article_with_user_filter() {
+        let (pool, repository, user_id) = setup().await;
+        let mut guard = TestArticleGuard::new(&pool, &repository);
+
+        let unique_title = format!("test title {}", Uuid::new_v4());
+        let article = create_test_article(
+            &repository,
+            user_id,
+            &unique_title,
+            "test filter body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article.public_id);
+
+        let found_article = repository
             .find(
-                article.id,
-                Some(ArticleFilter {
+                article.public_id,
+                ArticleFilter {
                     user_id: Some(user_id),
-                }),
-            )
-            .await
-            .unwrap();
-        assert_eq!(article.title, payload.title);
-        assert_eq!(article.body, payload.body);
-        assert_eq!(article.status, payload.status);
-
-        // create more articles for pagination test
-        let second_article = repository
-            .create(
-                user_id,
-                NewArticle {
-                    title: "second title".to_string(),
-                    body: "second body".to_string(),
-                    status: ArticleStatus::Draft,
-                    category_id: Some(1),
+                    ..Default::default()
                 },
             )
             .await
             .unwrap();
 
-        let third_article = repository
-            .create(
-                user_id,
-                NewArticle {
-                    title: "third title".to_string(),
-                    body: "third body".to_string(),
-                    status: ArticleStatus::Draft,
-                    category_id: Some(1),
+        assert_eq!(found_article.user_public_id, user_id);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_all_articles_with_pagination() {
+        let (pool, repository, user_id) = setup().await;
+        let mut guard = TestArticleGuard::new(&pool, &repository);
+
+        // Setup: create multiple test articles with unique titles
+        let uuid_prefix = Uuid::new_v4();
+        let article1 = create_test_article(
+            &repository,
+            user_id,
+            &format!("first article {}", uuid_prefix),
+            "first body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article1.public_id);
+
+        let article2 = create_test_article(
+            &repository,
+            user_id,
+            &format!("second article {}", uuid_prefix),
+            "second body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article2.public_id);
+
+        let article3 = create_test_article(
+            &repository,
+            user_id,
+            &format!("third article {}", uuid_prefix),
+            "third body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article3.public_id);
+
+        // Test: fetch with pagination (per_page = 2)
+        let (articles, total) = repository
+            .all(
+                ArticleFilter {
+                    user_id: Some(user_id),
+                    ..Default::default()
+                },
+                Pagination {
+                    per_page: 2,
+                    ..Pagination::default()
                 },
             )
             .await
             .unwrap();
 
-        // all with pagination
-        let articles = repository.all(None, 2).await.unwrap();
         assert_eq!(articles.len(), 2);
-        assert_eq!(articles[0].id, third_article.id); // 最新順
+        assert!(total.value() >= 3);
+        // Articles should be in DESC order (newest first)
+        assert_eq!(articles[0].public_id, article3.public_id);
+        assert_eq!(articles[1].public_id, article2.public_id);
+    }
 
-        // all with cursor
-        let articles = repository.all(Some(third_article.id), 2).await.unwrap();
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_all_articles_with_cursor() {
+        let (pool, repository, user_id) = setup().await;
+        let mut guard = TestArticleGuard::new(&pool, &repository);
+
+        // Setup: create multiple test articles
+        let unique_title1 = format!("test title1 {}", Uuid::new_v4());
+        let article1 = create_test_article(
+            &repository,
+            user_id,
+            &unique_title1,
+            "cursor first body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article1.public_id);
+
+        let unique_title2 = format!("test title2 {}", Uuid::new_v4());
+        let article2 = create_test_article(
+            &repository,
+            user_id,
+            &unique_title2,
+            "cursor second body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article2.public_id);
+
+        let unique_title3 = format!("test title3 {}", Uuid::new_v4());
+        let article3 = create_test_article(
+            &repository,
+            user_id,
+            &unique_title3,
+            "cursor third body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article3.public_id);
+
+        // Test: fetch with cursor pagination
+        let (articles, _) = repository
+            .all(
+                ArticleFilter {
+                    user_id: Some(user_id),
+                    ..Default::default()
+                },
+                Pagination {
+                    cursor: Some(article3.public_id),
+                    per_page: 2,
+                    ..Pagination::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        // Should get articles before the cursor (article2 and article1)
         assert_eq!(articles.len(), 2);
-        assert_eq!(articles[0].id, second_article.id);
+        assert_eq!(articles[0].public_id, article2.public_id);
+        assert_eq!(articles[1].public_id, article1.public_id);
+    }
 
-        // update
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_update_article() {
+        let (pool, repository, user_id) = setup().await;
+        let mut guard = TestArticleGuard::new(&pool, &repository);
+
+        // Setup: create a test article
+        let unique_title = format!("test title {}", Uuid::new_v4());
+        let article = create_test_article(
+            &repository,
+            user_id,
+            &unique_title,
+            "original body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article.public_id);
+
+        // Test: update the article
+        let update_unique_title = format!("updated title {}", Uuid::new_v4());
         let update_payload = UpdateArticle {
-            title: Some("updated title".to_string()),
+            title: Some(update_unique_title.to_string()),
             body: Some("updated body".to_string()),
             status: Some(ArticleStatus::Published),
-            category_id: Some(2),
+            category_public_id: None,
         };
+
         let updated_article = repository
-            .update(article.id, update_payload.clone())
+            .update(article.public_id, update_payload)
             .await
             .unwrap();
-        assert_eq!(updated_article.title, "updated title");
+
+        assert_eq!(updated_article.title, Some(update_unique_title.to_string()));
+        assert_eq!(updated_article.body, Some("updated body".to_string()));
         assert_eq!(updated_article.status, ArticleStatus::Published);
-
-        // delete
-        repository.delete(article.id).await.unwrap();
-        let articles = repository.all(None, 10).await.unwrap();
-        assert_eq!(articles.len(), 2);
-        let res = repository.find(article.id, None).await;
-        assert!(res.is_err());
-    }
-}
-
-#[cfg(test)]
-pub mod test_util {
-    use super::*;
-    use chrono::Local;
-    use sqlx::types::Uuid;
-    use std::{
-        collections::HashMap,
-        sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-    };
-
-    type Articles = HashMap<i32, Article>;
-
-    #[derive(Debug, Clone)]
-    pub struct RepositoryForMemory {
-        store: Arc<RwLock<Articles>>,
+        assert_eq!(updated_article.public_id, article.public_id);
     }
 
-    impl RepositoryForMemory {
-        pub fn new() -> Self {
-            Self {
-                store: Arc::default(),
-            }
-        }
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_delete_article() {
+        let (_, repository, user_id) = setup().await;
 
-        fn write_store_ref(&self) -> RwLockWriteGuard<Articles> {
-            self.store.write().unwrap()
-        }
+        // Setup: create a test article
+        let article = create_test_article(
+            &repository,
+            user_id,
+            "to delete",
+            "to delete body",
+            ArticleStatus::Draft,
+        )
+        .await;
 
-        fn read_store_ref(&self) -> RwLockReadGuard<Articles> {
-            self.store.read().unwrap()
-        }
+        repository.delete(article.public_id).await.unwrap();
+
+        // Verify deletion
+        let result = repository
+            .find(article.public_id, ArticleFilter::default())
+            .await;
+        assert!(result.is_err());
     }
 
-    #[async_trait]
-    impl IArticleRepository for RepositoryForMemory {
-        async fn create(&self, _user_id: Uuid, payload: NewArticle) -> anyhow::Result<Article> {
-            let mut store = self.write_store_ref();
-            let id = (store.len() + 1) as i32;
-            let article = Article {
-                id,
-                title: payload.title,
-                body: payload.body,
-                status: payload.status,
-                category_id: payload.category_id,
-                created_at: Local::now(),
-                updated_at: Local::now(),
-            };
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_attach_tags() {
+        let (pool, repository, user_id) = setup().await;
+        let mut guard = TestArticleGuard::new(&pool, &repository);
 
-            store.insert(id, article.clone());
-            Ok(article)
-        }
+        // Setup: create a test article
+        let article = create_test_article(
+            &repository,
+            user_id,
+            "article with tags",
+            "article with tags body",
+            ArticleStatus::Draft,
+        )
+        .await;
+        guard.track_article(article.public_id);
 
-        async fn find(&self, id: i32, _: Option<ArticleFilter>) -> anyhow::Result<Article> {
-            let store = self.read_store_ref();
-            let article = store
-                .get(&id)
-                .map(|article| article.clone())
-                .ok_or(RepositoryError::NotFound)?;
+        // Setup: create test tags
+        let tag1_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO tags (name, user_id) VALUES ($1, (SELECT id FROM users WHERE public_id = $2)) RETURNING public_id",
+        )
+        .bind("tag1")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        guard.track_tag(tag1_id);
 
-            Ok(article)
-        }
+        let tag2_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO tags (name, user_id) VALUES ($1, (SELECT id FROM users WHERE public_id = $2)) RETURNING public_id",
+        )
+        .bind("tag2")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        guard.track_tag(tag2_id);
 
-        async fn all(&self, cursor: Option<i32>, per_page: i32) -> anyhow::Result<Vec<Article>> {
-            let store = self.read_store_ref();
-            let mut articles: Vec<Article> = store.values().cloned().collect();
+        // Test: attach tags to article
+        repository
+            .attach_tags(article.public_id, vec![tag1_id, tag2_id])
+            .await
+            .unwrap();
 
-            articles.sort_by_key(|a| std::cmp::Reverse(a.id));
+        // Verify: check tags are attached
+        let attached_tags = sqlx::query_scalar::<_, Uuid>(
+            r#"
+            SELECT t.public_id
+            FROM article_tags at
+            JOIN tags t ON at.tag_id = t.id
+            JOIN articles a ON at.article_id = a.id
+            WHERE a.public_id = $1
+            ORDER BY t.public_id
+            "#,
+        )
+        .bind(article.public_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
-            if let Some(cursor) = cursor {
-                articles.retain(|article| article.id < cursor);
-            }
+        assert_eq!(attached_tags.len(), 2);
+        assert!(attached_tags.contains(&tag1_id));
+        assert!(attached_tags.contains(&tag2_id));
 
-            articles.truncate(per_page as usize);
-            Ok(articles)
-        }
+        // Test: re-attach with different tags (should replace)
+        repository
+            .attach_tags(article.public_id, vec![tag1_id])
+            .await
+            .unwrap();
 
-        async fn update(&self, id: i32, payload: UpdateArticle) -> anyhow::Result<Article> {
-            let mut store = self.write_store_ref();
-            let article = store.get(&id).unwrap();
-            let title = payload.title.unwrap_or(article.title.clone());
-            let body = payload.body.unwrap_or(article.body.clone());
-            let status = payload.status.unwrap_or(article.status.clone());
-            let category_id = payload.category_id.unwrap_or(article.category_id.unwrap());
-            let created_at = article.created_at.clone();
-            let article = Article {
-                id,
-                title,
-                body,
-                status,
-                category_id: Some(category_id),
-                created_at,
-                updated_at: Local::now(),
-            };
+        let attached_tags_after = sqlx::query_scalar::<_, Uuid>(
+            r#"
+            SELECT t.public_id
+            FROM article_tags at
+            JOIN tags t ON at.tag_id = t.id
+            JOIN articles a ON at.article_id = a.id
+            WHERE a.public_id = $1
+            "#,
+        )
+        .bind(article.public_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
-            store.insert(id, article.clone());
-            Ok(article)
-        }
-
-        async fn delete(&self, id: i32) -> anyhow::Result<()> {
-            let mut store = self.write_store_ref();
-
-            store.remove(&id).unwrap();
-            Ok(())
-        }
-    }
-
-    #[cfg(test)]
-    mod test {
-        use super::*;
-        use blog_domain::model::articles::article::ArticleStatus;
-        use sqlx::types::Uuid;
-
-        #[tokio::test]
-        async fn test_article_repository_for_memory() {
-            let repository = RepositoryForMemory::new();
-            let user_id = Uuid::new_v4();
-
-            // create
-            let payload = NewArticle {
-                title: "title".to_string(),
-                body: "body".to_string(),
-                category_id: Some(1),
-                status: ArticleStatus::Draft,
-            };
-            let article = repository.create(user_id, payload.clone()).await.unwrap();
-            assert_eq!(article.title, payload.title);
-            assert_eq!(article.body, payload.body);
-            assert_eq!(article.status, payload.status);
-
-            // find with filter
-            let article = repository
-                .find(
-                    article.id,
-                    Some(ArticleFilter {
-                        user_id: Some(user_id),
-                    }),
-                )
-                .await
-                .unwrap();
-            assert_eq!(article.title, payload.title);
-            assert_eq!(article.body, payload.body);
-            assert_eq!(article.status, payload.status);
-
-            // create more articles for pagination test
-            let second_article = repository
-                .create(
-                    user_id,
-                    NewArticle {
-                        title: "second title".to_string(),
-                        body: "second body".to_string(),
-                        status: ArticleStatus::Draft,
-                        category_id: Some(1),
-                    },
-                )
-                .await
-                .unwrap();
-
-            let third_article = repository
-                .create(
-                    user_id,
-                    NewArticle {
-                        title: "third title".to_string(),
-                        body: "third body".to_string(),
-                        status: ArticleStatus::Draft,
-                        category_id: Some(1),
-                    },
-                )
-                .await
-                .unwrap();
-
-            // all with pagination
-            let articles = repository.all(None, 2).await.unwrap();
-            assert_eq!(articles.len(), 2);
-            assert_eq!(articles[0].id, third_article.id);
-
-            // all with cursor
-            let articles = repository.all(Some(third_article.id), 2).await.unwrap();
-            assert_eq!(articles.len(), 2);
-            assert_eq!(articles[0].id, second_article.id);
-
-            // update
-            let update_payload = UpdateArticle {
-                title: Some("updated title".to_string()),
-                body: Some("updated body".to_string()),
-                status: Some(ArticleStatus::Published),
-                category_id: Some(2),
-            };
-            let updated_article = repository
-                .update(article.id, update_payload.clone())
-                .await
-                .unwrap();
-            assert_eq!(updated_article.title, "updated title");
-            assert_eq!(updated_article.status, ArticleStatus::Published);
-
-            // delete
-            repository.delete(article.id).await.unwrap();
-            let articles = repository.all(None, 10).await.unwrap();
-            assert_eq!(articles.len(), 2); // 1つ削除されたので2つに
-            let res = repository.find(article.id, None).await;
-            assert!(res.is_err());
-        }
+        assert_eq!(attached_tags_after.len(), 1);
+        assert_eq!(attached_tags_after[0], tag1_id);
     }
 }

@@ -1,10 +1,10 @@
 use crate::{
+    error::AppError,
     model::{
         api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
         paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
         validated_query_param::ValidatedQueryParam,
     },
-    utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
     extract::{Extension, Json, Path},
@@ -38,7 +38,7 @@ pub async fn create_article<T, U, W>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<NewArticle>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IArticleRepository,
     U: ITokenRepository,
@@ -47,18 +47,12 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let article = article_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to create article")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -71,7 +65,7 @@ where
 pub async fn find_article<T, W>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T, W>>>,
     Path(article_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IArticleRepository,
     W: ITagRepository,
@@ -79,10 +73,7 @@ where
     let article = article_app_service
         .find(article_id, ArticleFilter::default())
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Article not found")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -95,7 +86,7 @@ where
 pub async fn all_articles<T, U>(
     Extension(article_app_service): Extension<Arc<ArticleAppService<T, U>>>,
     ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<ArticleFilter>>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IArticleRepository,
     U: ITagRepository,
@@ -107,10 +98,7 @@ where
     let (mut articles, total) = article_app_service
         .all(param.filter, pagination.clone())
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to get all articles")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let has_next = articles.len() == pagination.per_page as usize;
     if has_next {
@@ -136,27 +124,23 @@ pub async fn update_article<T, U, W>(
     Path(article_id): Path<Uuid>,
     AuthToken(token): AuthToken<AccessTokenString>,
     ValidatedJson(payload): ValidatedJson<UpdateArticle>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IArticleRepository,
     U: ITokenRepository,
     W: ITagRepository,
 {
-    let _access_token_data = token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
+
+    let user_id = access_token_data.claims.sub();
 
     let article = article_app_service
-        .update(article_id, payload)
+        .update_with_auth(user_id, article_id, payload)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to update article")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -174,28 +158,24 @@ pub async fn delete_article<T, U, V>(
     Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(article_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IArticleRepository,
     U: ITokenRepository,
     V: ITagRepository,
 {
-    let _access_token_data = token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to delete article")
-        })?;
+        .map_err(|e| AppError::from(e))?;
+
+    let user_id = access_token_data.claims.sub();
 
     article_app_service
-        .delete(article_id)
+        .delete_with_auth(user_id, article_id)
         .await
         .map(|_| ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to delete article")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
@@ -210,27 +190,23 @@ pub async fn attach_tags<T, U, V>(
     AuthToken(token): AuthToken<AccessTokenString>,
     Path(article_id): Path<Uuid>,
     Json(tag_ids): Json<Vec<Uuid>>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ITokenRepository,
     U: IArticleRepository,
     V: ITagRepository,
 {
-    let _access_token_data = token_app_service
+    let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to verify access token")
-        })?;
+        .map_err(|e| AppError::from(e))?;
+
+    let user_id = access_token_data.claims.sub();
 
     article_app_service
-        .attach_tags(article_id, tag_ids)
+        .attach_tags_with_auth(user_id, article_id, tag_ids)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to attach tags to article")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::<()>::new(StatusCode::OK, None, None))
 }
@@ -241,7 +217,7 @@ pub async fn find_articles_by_tag<T>(
     ValidatedQueryParam(query_param): ValidatedQueryParam<
         PagedFilterQueryParam<ArticlesByTagFilter>,
     >,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IArticlesByTagQueryService,
 {
@@ -253,10 +229,7 @@ where
     let (mut articles, total) = articles_by_tag_query_service
         .find_article_title_by_tag(filter, pagination.clone())
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to find articles by tag")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let has_next = articles.len() == pagination.per_page as usize;
     if has_next {

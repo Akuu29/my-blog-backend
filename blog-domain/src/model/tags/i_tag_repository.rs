@@ -23,6 +23,7 @@ impl TagFilter {
 #[async_trait]
 pub trait ITagRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
     async fn create(&self, user_id: Uuid, payload: NewTag) -> anyhow::Result<Tag>;
+    async fn find(&self, tag_id: Uuid) -> anyhow::Result<Tag>;
     async fn all(
         &self,
         tag_filter: TagFilter,

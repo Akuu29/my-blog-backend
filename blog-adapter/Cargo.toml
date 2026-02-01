@@ -13,12 +13,15 @@ blog-app.workspace = true
 sqlx.workspace = true
 serde.workspace = true
 chrono = { version = "0.4.38", features = ["serde"] }
-tokio = "1.37.0"
 dotenv.workspace = true
 reqwest.workspace = true
 validator.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+serial_test = "3.2.0"
+tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = []

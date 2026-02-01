@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use blog_domain::model::{
-    articles::article::Article,
+    articles::article::{Article, ArticleStatus},
     common::{item_count::ItemCount, pagination::Pagination},
 };
 use serde::Deserialize;
@@ -18,6 +18,8 @@ pub struct ArticlesByTagFilter {
     #[serde_as(as = "Option<DisplayFromStr>")]
     #[serde(rename = "userId")]
     pub user_public_id: Option<Uuid>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub article_status: Option<ArticleStatus>,
 }
 
 #[async_trait]

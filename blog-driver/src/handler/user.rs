@@ -1,11 +1,11 @@
 use crate::{
+    error::AppError,
     model::{
         api_response::ApiResponse, auth_token::AuthToken, paged_body::PagedBody,
         paged_filter_query_param::PagedFilterQueryParam, validated_json::ValidatedJson,
         validated_query_param::ValidatedQueryParam,
     },
     service::cookie_service::CookieService,
-    utils::{app_error::AppError, error_handler::ErrorHandler},
 };
 use axum::{
     extract::{Extension, Path},
@@ -13,13 +13,15 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::PrivateCookieJar;
-use blog_adapter::utils::repository_error::RepositoryError;
 use blog_app::service::{
-    tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
+    tokens::token_app_service::TokenAppService,
+    users::{UserUsecaseError, user_app_service::UserAppService},
 };
 use blog_domain::model::{
     tokens::{
-        i_token_repository::ITokenRepository, token::ApiCredentials, token_string::IdTokenString,
+        i_token_repository::ITokenRepository,
+        token::ApiCredentials,
+        token_string::{AccessTokenString, IdTokenString},
     },
     users::{
         i_user_repository::{IUserRepository, UserFilter},
@@ -39,7 +41,7 @@ pub async fn sign_up<T, U>(
     Extension(cookie_service): Extension<Arc<CookieService>>,
     AuthToken(token): AuthToken<IdTokenString>,
     jar: PrivateCookieJar,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ITokenRepository,
     U: IUserRepository,
@@ -49,57 +51,43 @@ where
     let id_token_data = token_app_service
         .verify_id_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to sign up")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let id_token_claims = id_token_data.claims;
 
-    let provider_name = id_token_claims.provider_name().map_err(|e| {
-        let app_err = AppError::from(e);
-        app_err.handle_error("Failed to sign up")
-    })?;
+    let provider_name = id_token_claims
+        .provider_name()
+        .map_err(|e| AppError::from(e))?;
     let exists_user = user_app_service
         .find_by_user_identity(&provider_name, &id_token_claims.sub())
         .await;
 
     let response = match exists_user {
-        Ok(_) => {
-            let app_err = AppError::Unexpected("User already exists".to_string());
-            Err(app_err.handle_error("Failed to sign up"))
-        }
-        Err(e) => match e.downcast_ref::<RepositoryError>() {
-            Some(RepositoryError::NotFound) => {
+        Ok(_) => Err(AppError::Unexpected("User already exists".to_string())),
+        Err(e) => match &e {
+            UserUsecaseError::RepositoryError(_) => {
                 let new_user = NewUser::new(
                     &provider_name,
                     &id_token_claims.sub(),
                     &id_token_claims.email(),
                     id_token_claims.email_verified(),
                 );
-                let user = user_app_service.create(new_user).await.map_err(|e| {
-                    let app_err = AppError::from(e);
-                    app_err.handle_error("Failed to sign up")
-                })?;
+                let user = user_app_service
+                    .create(new_user)
+                    .await
+                    .map_err(|e| AppError::from(e))?;
 
                 let access_token = token_app_service
                     .generate_access_token(&user)
-                    .map_err(|e| {
-                        let app_err = AppError::from(e);
-                        app_err.handle_error("Failed to sign up")
-                    })?;
+                    .map_err(|e| AppError::from(e))?;
 
-                let api_credentials = ApiCredentials::new(&access_token);
-
-                let refresh_token =
-                    token_app_service
-                        .generate_refresh_token(&user)
-                        .map_err(|e| {
-                            let app_err = AppError::from(e);
-                            app_err.handle_error("Failed to sign up")
-                        })?;
+                let refresh_token = token_app_service
+                    .generate_refresh_token(&user)
+                    .map_err(|e| AppError::from(e))?;
                 let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
                 let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
+
+                let api_credentials = ApiCredentials::new(&access_token, user);
 
                 Ok(ApiResponse::new(
                     StatusCode::OK,
@@ -107,10 +95,7 @@ where
                     Some(updated_jar),
                 ))
             }
-            _ => {
-                let app_err = AppError::from(e);
-                Err(app_err.handle_error("Failed to sign up"))
-            }
+            _ => Err(AppError::from(e)),
         },
     };
 
@@ -133,7 +118,7 @@ pub async fn sign_in<T, U>(
     Extension(cookie_service): Extension<Arc<CookieService>>,
     AuthToken(token): AuthToken<IdTokenString>,
     jar: PrivateCookieJar,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: ITokenRepository,
     U: IUserRepository,
@@ -143,17 +128,13 @@ where
     let id_token_data = token_app_service
         .verify_id_token(token)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to sign in")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let id_token_claims = id_token_data.claims;
 
-    let provider_name = id_token_claims.provider_name().map_err(|e| {
-        let app_err = AppError::from(e);
-        app_err.handle_error("Failed to sign in")
-    })?;
+    let provider_name = id_token_claims
+        .provider_name()
+        .map_err(|e| AppError::from(e))?;
 
     let exists_user = user_app_service
         .find_by_user_identity(&provider_name, &id_token_claims.sub())
@@ -163,20 +144,15 @@ where
         Ok(user) => {
             let access_token = token_app_service
                 .generate_access_token(&user)
-                .map_err(|e| {
-                    let app_err = AppError::from(e);
-                    app_err.handle_error("Failed to sign in")
-                })?;
-            let api_credentials = ApiCredentials::new(&access_token);
+                .map_err(|e| AppError::from(e))?;
 
             let refresh_token = token_app_service
                 .generate_refresh_token(&user)
-                .map_err(|e| {
-                    let app_err = AppError::from(e);
-                    app_err.handle_error("Failed to sign in")
-                })?;
+                .map_err(|e| AppError::from(e))?;
             let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
             let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
+
+            let api_credentials = ApiCredentials::new(&access_token, user);
 
             Ok(ApiResponse::new(
                 StatusCode::OK,
@@ -184,10 +160,7 @@ where
                 Some(updated_jar),
             ))
         }
-        Err(e) => {
-            let app_err = AppError::from(e);
-            Err(app_err.handle_error("Failed to sign in"))
-        }
+        Err(e) => Err(AppError::from(e)),
     };
 
     let min_duration = time::Duration::from_millis(1000);
@@ -202,7 +175,7 @@ where
 pub async fn all<T>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     ValidatedQueryParam(param): ValidatedQueryParam<PagedFilterQueryParam<UserFilter>>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IUserRepository,
 {
@@ -213,10 +186,7 @@ where
     let (mut users, total) = user_app_service
         .all(param.filter, pagination.clone())
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to get users")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     let has_next = users.len() == pagination.per_page as usize;
     if has_next {
@@ -237,38 +207,14 @@ where
 pub async fn find<T>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
     Path(user_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
-where
-    T: IUserRepository,
-{
-    let user = user_app_service.find(user_id).await.map_err(|e| {
-        let app_err = AppError::from(e);
-        app_err.handle_error("Failed to find user")
-    })?;
-
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&user).unwrap()),
-        None,
-    ))
-}
-
-#[tracing::instrument(name = "update_user", skip(user_app_service))]
-pub async fn update<T>(
-    Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
-    Path(user_id): Path<Uuid>,
-    ValidatedJson(payload): ValidatedJson<UpdateUser>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+) -> Result<impl IntoResponse, AppError>
 where
     T: IUserRepository,
 {
     let user = user_app_service
-        .update(user_id, payload)
+        .find(user_id)
         .await
-        .map_err(|e| {
-            let app_err = AppError::from(e);
-            app_err.handle_error("Failed to update user")
-        })?;
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -277,18 +223,56 @@ where
     ))
 }
 
-#[tracing::instrument(name = "delete_user", skip(user_app_service))]
-pub async fn delete<T>(
+#[tracing::instrument(name = "update_user", skip(user_app_service, token_app_service, token))]
+pub async fn update<T, U>(
     Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
     Path(user_id): Path<Uuid>,
-) -> Result<impl IntoResponse, ApiResponse<String>>
+    ValidatedJson(payload): ValidatedJson<UpdateUser>,
+) -> Result<impl IntoResponse, AppError>
 where
     T: IUserRepository,
+    U: ITokenRepository,
 {
-    user_app_service.delete(user_id).await.map_err(|e| {
-        let app_err = AppError::from(e);
-        app_err.handle_error("Failed to delete user")
-    })?;
+    let token_data = token_app_service
+        .verify_access_token(token)
+        .await
+        .map_err(|e| AppError::from(e))?;
+
+    let user = user_app_service
+        .update_with_auth(user_id, token_data.claims.sub(), payload)
+        .await
+        .map_err(|e| AppError::from(e))?;
+
+    Ok(ApiResponse::new(
+        StatusCode::OK,
+        Some(serde_json::to_string(&user).unwrap()),
+        None,
+    ))
+}
+
+#[tracing::instrument(name = "delete_user", skip(user_app_service, token_app_service, token))]
+pub async fn delete<T, U>(
+    Extension(user_app_service): Extension<Arc<UserAppService<T>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
+    Path(user_id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError>
+where
+    T: IUserRepository,
+    U: ITokenRepository,
+{
+    let token_data = token_app_service
+        .verify_access_token(token)
+        .await
+        .map_err(|e| AppError::from(e))?;
+
+    // Use the new delete_with_auth method which includes authorization check
+    user_app_service
+        .delete_with_auth(user_id, token_data.claims.sub())
+        .await
+        .map_err(|e| AppError::from(e))?;
 
     Ok(ApiResponse::<()>::new(StatusCode::OK, None, None))
 }
