@@ -21,10 +21,12 @@ impl ITagsAttachedArticleQueryService for TagsAttachedArticleQueryService {
             r#"
             SELECT
                 t.public_id AS public_id,
+                u.public_id AS user_public_id,
                 t.name AS name,
                 t.created_at AS created_at,
                 t.updated_at AS updated_at
             FROM tags AS t
+            INNER JOIN users AS u ON t.user_id = u.id
             INNER JOIN article_tags AS at ON t.id = at.tag_id
             WHERE at.article_id = (SELECT id FROM articles WHERE public_id = $1)
             "#,
