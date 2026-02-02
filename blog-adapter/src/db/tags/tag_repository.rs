@@ -135,14 +135,11 @@ impl ITagRepository for TagRepository {
         because each is validated to prevent conflicts.
         */
         if let Some(cursor) = pagination.cursor {
-            let cid_option = sqlx::query_scalar!(
-                r#"
-                SELECT id FROM tags WHERE public_id = $1
-                "#,
-                cursor
-            )
-            .fetch_optional(&self.pool)
-            .await?;
+            let cid_option =
+                sqlx::query_scalar::<_, i32>("SELECT id FROM tags WHERE public_id = $1")
+                    .bind(cursor)
+                    .fetch_optional(&self.pool)
+                    .await?;
 
             let cid = cid_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {

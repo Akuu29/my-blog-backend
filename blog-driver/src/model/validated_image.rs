@@ -12,6 +12,11 @@ use blog_domain::model::images::image::{NewImage, StorageType};
 use uuid::Uuid;
 use validator::Validate;
 
+fn api_error_response(code: ErrorCode, message: String, status: StatusCode) -> ApiResponse<String> {
+    let err = ErrorResponse::new(code, message);
+    ApiResponse::new(status, Some(serde_json::to_string(&err).unwrap()), None)
+}
+
 #[derive(Debug)]
 pub struct ValidatedImage(pub NewImage);
 
@@ -24,37 +29,34 @@ where
 
     #[tracing::instrument(name = "validated_image", skip(state))]
     async fn from_request(req: Request, state: &B) -> Result<Self, Self::Rejection> {
-        let mut multipart = Multipart::from_request(req, state).await.unwrap();
+        let mut multipart = Multipart::from_request(req, state).await.map_err(|e| {
+            tracing::error!(error.kind="Unexpected", error=%e);
+            api_error_response(
+                ErrorCode::InvalidInput,
+                "Invalid multipart request".to_string(),
+                StatusCode::BAD_REQUEST,
+            )
+        })?;
 
         let mut file_data = Vec::default();
         let mut filename = None;
         let mut article_id = None;
 
         while let Some(field) = multipart.next_field().await.map_err(|e| {
-            tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-            let err_res_body = ErrorResponse::new(
+            tracing::error!(error.kind="Unexpected", error=%e.to_string());
+            api_error_response(
                 ErrorCode::InvalidInput,
                 format!("Failed to process multipart form data: {}", e),
-            );
-            ApiResponse::new(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&err_res_body).unwrap()),
-                None,
             )
         })? {
             let name = field
                 .name()
                 .ok_or_else(|| {
-                    ApiResponse::new(
+                    api_error_response(
+                        ErrorCode::InvalidInput,
+                        "Missing field name".to_string(),
                         StatusCode::BAD_REQUEST,
-                        Some(
-                            serde_json::to_string(&ErrorResponse::new(
-                                ErrorCode::InvalidInput,
-                                "Missing field name".to_string(),
-                            ))
-                            .unwrap(),
-                        ),
-                        None,
                     )
                 })?
                 .to_string();
@@ -62,44 +64,32 @@ where
             match name.as_str() {
                 "file" => {
                     let data = field.bytes().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-                        let err_msg = ErrorResponse::new(
+                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                        api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read file data".to_string(),
-                        );
-                        ApiResponse::new(
                             StatusCode::BAD_REQUEST,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
                         )
                     })?;
                     file_data = data.to_vec();
                 }
                 "filename" => {
                     filename = Some(field.text().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-                        let err_msg = ErrorResponse::new(
+                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                        api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read filename".to_string(),
-                        );
-                        ApiResponse::new(
                             StatusCode::BAD_REQUEST,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
                         )
                     })?);
                 }
                 "articleId" => {
                     article_id = Some(field.text().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-                        let err_msg = ErrorResponse::new(
+                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                        api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read articleId".to_string(),
-                        );
-                        ApiResponse::new(
                             StatusCode::BAD_REQUEST,
-                            Some(serde_json::to_string(&err_msg).unwrap()),
-                            None,
                         )
                     })?);
                 }
@@ -107,38 +97,40 @@ where
             }
         }
 
-        let kind =
-            infer::get(&file_data).ok_or(ApiResponse::new(StatusCode::BAD_REQUEST, None, None))?;
+        let kind = infer::get(&file_data).ok_or(api_error_response(
+            ErrorCode::InvalidInput,
+            "file kind is required".to_string(),
+            StatusCode::BAD_REQUEST,
+        ))?;
 
-        let article_public_id = match article_id.as_deref() {
-            Some(id) => id.parse::<Uuid>().map_err(|e| {
-                tracing::error!(error.kind="Unexpected", errror=%e.to_string());
-                let err_msg = ErrorResponse::new(
-                    ErrorCode::InvalidInput,
-                    "Failed to parse articleId".to_string(),
-                );
-                ApiResponse::new(
-                    StatusCode::BAD_REQUEST,
-                    Some(serde_json::to_string(&err_msg).unwrap()),
-                    None,
-                )
-            })?,
-            None => {
-                tracing::error!(error.kind = "Unexpected", errror = "articleId is required");
-                let err_msg = ErrorResponse::new(
+        let filename = filename.ok_or_else(|| {
+            api_error_response(
+                ErrorCode::InvalidInput,
+                "filename is required".to_string(),
+                StatusCode::BAD_REQUEST,
+            )
+        })?;
+
+        let article_public_id = article_id
+            .ok_or_else(|| {
+                api_error_response(
                     ErrorCode::InvalidInput,
                     "articleId is required".to_string(),
-                );
-                return Err(ApiResponse::new(
                     StatusCode::BAD_REQUEST,
-                    Some(serde_json::to_string(&err_msg).unwrap()),
-                    None,
-                ));
-            }
-        };
+                )
+            })?
+            .parse::<Uuid>()
+            .map_err(|e| {
+                tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                api_error_response(
+                    ErrorCode::InvalidInput,
+                    "Failed to parse articleId".to_string(),
+                    StatusCode::BAD_REQUEST,
+                )
+            })?;
 
         let new_image = NewImage {
-            name: filename.unwrap(),
+            name: filename,
             mime_type: kind.mime_type().to_string(),
             data: file_data,
             url: None,

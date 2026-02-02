@@ -55,8 +55,13 @@ pub struct NewUser {
 }
 
 impl NewUser {
-    pub fn new(provider_name: &str, user_id: &str, email: &str, email_verified: bool) -> Self {
-        let email_cipher = EmailCipher::from_plaintext(email);
+    pub fn new(
+        provider_name: &str,
+        user_id: &str,
+        email_cipher: EmailCipher,
+        email_hash: EmailHash,
+        email_verified: bool,
+    ) -> Self {
         Self {
             name: Self::init_user_name(10),
             role: UserRole::default(),
@@ -64,7 +69,7 @@ impl NewUser {
                 provider_name: provider_name.to_string(),
                 provider_user_id: user_id.to_string(),
                 provider_email_cipher: email_cipher,
-                provider_email_hash: EmailHash::from_plaintext(email),
+                provider_email_hash: email_hash,
                 provider_email_verified: email_verified,
                 is_primary: true,
             },
