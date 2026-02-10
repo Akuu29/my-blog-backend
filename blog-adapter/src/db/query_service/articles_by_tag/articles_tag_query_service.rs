@@ -299,6 +299,7 @@ mod test {
         let filter = ArticlesByTagFilter {
             tag_ids: vec![tag_public_id],
             user_public_id: None,
+            article_status: None,
         };
         let pagination = Pagination {
             per_page: 10,
@@ -382,6 +383,7 @@ mod test {
         let filter = ArticlesByTagFilter {
             tag_ids: vec![tag1_id, tag2_id],
             user_public_id: None,
+            article_status: None,
         };
         let pagination = Pagination {
             per_page: 10,
@@ -450,6 +452,7 @@ mod test {
         let filter = ArticlesByTagFilter {
             tag_ids: vec![tag_id],
             user_public_id: Some(user_uuid),
+            article_status: None,
         };
         let pagination = Pagination {
             per_page: 10,
