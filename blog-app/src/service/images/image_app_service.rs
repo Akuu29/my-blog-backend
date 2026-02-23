@@ -60,7 +60,7 @@ where
                     "{}://{}/images/{}",
                     std::env::var("GATEWAY_PROTOCOL").expect("undefined GATEWAY_PROTOCOL"),
                     std::env::var("GATEWAY_DOMAIN").expect("undefined GATEWAY_DOMAIN"),
-                    image.public_id
+                    image.id
                 )
             }
             _ => image.url.unwrap(),
@@ -91,7 +91,7 @@ where
                         "{}://{}/images/{}",
                         std::env::var("GATEWAY_PROTOCOL").expect("undefined GATEWAY_PROTOCOL"),
                         std::env::var("GATEWAY_DOMAIN").expect("undefined GATEWAY_DOMAIN"),
-                        image.public_id
+                        image.id
                     )
                 }
                 _ => image.url.as_ref().unwrap().to_string(),

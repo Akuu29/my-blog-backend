@@ -49,6 +49,7 @@ pub struct AccessTokenClaims {
     nbf: usize,
     /// unique identifier for the token
     jti: String,
+    name: String,
     pub role: UserRole,
 }
 
@@ -63,15 +64,20 @@ impl AccessTokenClaims {
             iat: now.timestamp() as usize,
             aud: std::env::var("AUDIENCE").expect("undefined AUDIENCE"),
             iss: std::env::var("ISSUER").expect("undefined ISSUER"),
-            sub: user.public_id,
+            sub: user.id,
             nbf: not_before.timestamp() as usize,
             jti: uuid::Uuid::new_v4().to_string(),
+            name: user.name.clone(),
             role: user.role.clone(),
         }
     }
 
     pub fn sub(&self) -> Uuid {
         self.sub
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -94,7 +100,7 @@ impl RefreshTokenClaims {
             iat: now.timestamp() as usize,
             aud: std::env::var("AUDIENCE").expect("undefined AUDIENCE"),
             iss: std::env::var("ISSUER").expect("undefined ISSUER"),
-            sub: user.public_id,
+            sub: user.id,
         }
     }
 

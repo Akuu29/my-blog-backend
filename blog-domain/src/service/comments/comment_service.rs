@@ -21,7 +21,7 @@ where
     pub async fn verify_ownership(
         &self,
         comment_id: Uuid,
-        user_public_id: Uuid,
+        user_id: Uuid,
     ) -> Result<(), CommentServiceError> {
         let comment = self
             .repository
@@ -29,7 +29,7 @@ where
             .await
             .map_err(|e| CommentServiceError::InternalError(e.to_string()))?;
 
-        if comment.user_public_id != Some(user_public_id) {
+        if comment.user_id != Some(user_id) {
             return Err(CommentServiceError::Unauthorized);
         }
 

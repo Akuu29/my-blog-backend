@@ -35,9 +35,9 @@ impl CategoryRepository {
             }
         };
 
-        if let Some(public_id) = filter.public_id {
+        if let Some(id) = filter.id {
             push_condition(qb);
-            qb.push("c.public_id = ").push_bind(public_id);
+            qb.push("c.id = ").push_bind(id);
         }
 
         if let Some(name) = filter.name.clone() {
@@ -45,9 +45,9 @@ impl CategoryRepository {
             qb.push("c.name = ").push_bind(name);
         }
 
-        if let Some(user_public_id) = filter.user_public_id {
+        if let Some(user_id) = filter.user_id {
             push_condition(qb);
-            qb.push("u.public_id = ").push_bind(user_public_id);
+            qb.push("c.user_id = ").push_bind(user_id);
         }
 
         return has_condition;
@@ -60,14 +60,13 @@ impl ICategoryRepository for CategoryRepository {
         let category = sqlx::query_as::<_, Category>(
             r#"
             SELECT
-                c.public_id,
-                u.public_id AS user_public_id,
+                c.id,
+                c.user_id,
                 c.name,
                 c.created_at,
                 c.updated_at
             FROM categories AS c
-            JOIN users AS u ON c.user_id = u.id
-            WHERE c.public_id = $1
+            WHERE c.id = $1
             ;
             "#,
         )
@@ -89,13 +88,10 @@ impl ICategoryRepository for CategoryRepository {
                 name,
                 user_id
             )
-            VALUES (
-                $1,
-                (SELECT id FROM users WHERE public_id = $2)
-            )
+            VALUES ($1, $2)
             RETURNING
-                public_id,
-                $2 AS user_public_id,
+                id,
+                user_id,
                 name,
                 created_at,
                 updated_at
@@ -119,13 +115,12 @@ impl ICategoryRepository for CategoryRepository {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                c.public_id,
-                u.public_id AS user_public_id,
+                c.id,
+                c.user_id,
                 c.name,
                 c.created_at,
                 c.updated_at
             FROM categories AS c
-            LEFT JOIN users AS u ON c.user_id = u.id
             "#,
         );
 
@@ -138,22 +133,28 @@ impl ICategoryRepository for CategoryRepository {
         because each is validated to prevent conflicts.
         */
         if let Some(cursor) = pagination.cursor {
-            let cid_option =
-                sqlx::query_scalar::<_, i32>("SELECT id FROM categories WHERE public_id = $1")
-                    .bind(cursor)
-                    .fetch_optional(&self.pool)
-                    .await?;
+            let cursor_ts_option = sqlx::query_scalar::<
+                _,
+                sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>,
+            >("SELECT created_at FROM categories WHERE id = $1")
+            .bind(cursor)
+            .fetch_optional(&self.pool)
+            .await?;
 
-            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
+            let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
                 qb.push(" AND ");
             } else {
                 qb.push(" WHERE ");
             }
-            qb.push("c.id < ").push_bind(cid);
+            qb.push("(c.created_at, c.id) < (")
+                .push_bind(cursor_ts)
+                .push(", ")
+                .push_bind(cursor)
+                .push(")");
         }
 
-        qb.push(" ORDER BY c.id DESC");
+        qb.push(" ORDER BY c.created_at DESC, c.id DESC");
 
         if let Some(offset) = pagination.offset {
             qb.push(" OFFSET ").push_bind(offset);
@@ -172,7 +173,6 @@ impl ICategoryRepository for CategoryRepository {
             SELECT
                 COUNT(*)
             FROM categories AS c
-            LEFT JOIN users AS u ON c.user_id = u.id
             "#,
         );
         // build conditions
@@ -191,10 +191,10 @@ impl ICategoryRepository for CategoryRepository {
             UPDATE categories
             SET
                 name = $1
-            WHERE public_id = $2
+            WHERE id = $2
             RETURNING
-                public_id,
-                (SELECT public_id FROM users WHERE id = categories.user_id) AS user_public_id,
+                id,
+                user_id,
                 name,
                 created_at,
                 updated_at
@@ -213,7 +213,7 @@ impl ICategoryRepository for CategoryRepository {
         sqlx::query(
             r#"
             DELETE FROM categories
-            WHERE public_id = $1
+            WHERE id = $1
             ;
             "#,
         )
@@ -248,9 +248,9 @@ mod test {
         ));
         let repository = CategoryRepository::new(pool.clone());
 
-        // Get test user public_id (UUID)
-        let user_public_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
-        let user_uuid = uuid::Uuid::parse_str(&user_public_id).expect("invalid TEST_USER_ID UUID");
+        // Get test user id (UUID)
+        let user_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
+        let user_uuid = uuid::Uuid::parse_str(&user_id).expect("invalid TEST_USER_ID UUID");
 
         (pool, repository, user_uuid)
     }
@@ -317,10 +317,10 @@ mod test {
         };
 
         let category = repository.create(user_uuid, payload).await.unwrap();
-        guard.track(category.public_id);
+        guard.track(category.id);
 
         assert_eq!(category.name, unique_name);
-        assert_eq!(category.user_public_id, user_uuid);
+        assert_eq!(category.user_id, user_uuid);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -335,7 +335,7 @@ mod test {
             &format!("category 1 {}", Uuid::new_v4()),
         )
         .await;
-        guard.track(category1.public_id);
+        guard.track(category1.id);
 
         let category2 = create_test_category(
             &repository,
@@ -343,12 +343,12 @@ mod test {
             &format!("category 2 {}", Uuid::new_v4()),
         )
         .await;
-        guard.track(category2.public_id);
+        guard.track(category2.id);
 
         let filter = CategoryFilter {
-            public_id: None,
+            id: None,
             name: None,
-            user_public_id: Some(user_uuid),
+            user_id: Some(user_uuid),
         };
         let pagination = Pagination {
             per_page: 10,
@@ -358,16 +358,8 @@ mod test {
 
         let (categories, _) = repository.all(filter, pagination).await.unwrap();
 
-        assert!(
-            categories
-                .iter()
-                .any(|c| c.public_id == category1.public_id)
-        );
-        assert!(
-            categories
-                .iter()
-                .any(|c| c.public_id == category2.public_id)
-        );
+        assert!(categories.iter().any(|c| c.id == category1.id));
+        assert!(categories.iter().any(|c| c.id == category2.id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -382,7 +374,7 @@ mod test {
             &format!("category cursor 1 {}", Uuid::new_v4()),
         )
         .await;
-        guard.track(category1.public_id);
+        guard.track(category1.id);
 
         let category2 = create_test_category(
             &repository,
@@ -390,7 +382,7 @@ mod test {
             &format!("category cursor 2 {}", Uuid::new_v4()),
         )
         .await;
-        guard.track(category2.public_id);
+        guard.track(category2.id);
 
         let category3 = create_test_category(
             &repository,
@@ -398,12 +390,12 @@ mod test {
             &format!("category cursor 3 {}", Uuid::new_v4()),
         )
         .await;
-        guard.track(category3.public_id);
+        guard.track(category3.id);
 
         let filter = CategoryFilter {
-            public_id: None,
+            id: None,
             name: None,
-            user_public_id: Some(user_uuid),
+            user_id: Some(user_uuid),
         };
 
         // Get first page
@@ -416,11 +408,11 @@ mod test {
         assert!(first_page.len() >= 2);
 
         // Get second page using cursor
-        let cursor_id = first_page[1].public_id;
+        let cursor_id = first_page[1].id;
         let filter_with_cursor = CategoryFilter {
-            public_id: None,
+            id: None,
             name: None,
-            user_public_id: Some(user_uuid),
+            user_id: Some(user_uuid),
         };
         let pagination_with_cursor = Pagination {
             per_page: 2,
@@ -433,7 +425,7 @@ mod test {
             .unwrap();
 
         // Verify cursor works - second page should not contain the cursor category
-        assert!(!second_page.iter().any(|c| c.public_id == cursor_id));
+        assert!(!second_page.iter().any(|c| c.id == cursor_id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -448,7 +440,7 @@ mod test {
             &format!("original name {}", Uuid::new_v4()),
         )
         .await;
-        guard.track(category.public_id);
+        guard.track(category.id);
 
         let updated_name = format!("updated name {}", Uuid::new_v4());
         let update_payload = UpdateCategory {
@@ -456,11 +448,11 @@ mod test {
         };
 
         let updated_category = repository
-            .update(category.public_id, update_payload)
+            .update(category.id, update_payload)
             .await
             .unwrap();
 
-        assert_eq!(updated_category.public_id, category.public_id);
+        assert_eq!(updated_category.id, category.id);
         assert_eq!(updated_category.name, updated_name);
     }
 
@@ -476,12 +468,12 @@ mod test {
             &format!("find test {}", Uuid::new_v4()),
         )
         .await;
-        guard.track(created_category.public_id);
+        guard.track(created_category.id);
 
-        let found_category = repository.find(created_category.public_id).await.unwrap();
+        let found_category = repository.find(created_category.id).await.unwrap();
 
-        assert_eq!(found_category.public_id, created_category.public_id);
-        assert_eq!(found_category.user_public_id, user_uuid);
+        assert_eq!(found_category.id, created_category.id);
+        assert_eq!(found_category.user_id, user_uuid);
         assert_eq!(found_category.name, created_category.name);
     }
 
@@ -508,12 +500,12 @@ mod test {
             &format!("to delete {}", Uuid::new_v4()),
         )
         .await;
-        guard.track(category.public_id);
+        guard.track(category.id);
 
-        repository.delete(category.public_id).await.unwrap();
+        repository.delete(category.id).await.unwrap();
 
         // Verify deletion by trying to find it
-        let result = repository.find(category.public_id).await;
+        let result = repository.find(category.id).await;
         assert!(result.is_err());
     }
 }

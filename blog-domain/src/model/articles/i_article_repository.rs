@@ -17,8 +17,7 @@ pub struct ArticleFilter {
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub status: Option<ArticleStatus>,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    #[serde(rename = "categoryId")]
-    pub category_public_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     #[validate(length(max = 100, message = "title_contains length must be 100 or less"))]
     pub title_contains: Option<String>,

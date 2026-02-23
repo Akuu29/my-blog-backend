@@ -38,7 +38,7 @@ impl ArticleRepository {
 
         if let Some(user_id) = filter.user_id {
             push_condition(qb);
-            qb.push("u.public_id = ").push_bind(user_id);
+            qb.push("a.user_id = ").push_bind(user_id);
         }
 
         if let Some(status) = filter.status {
@@ -46,9 +46,9 @@ impl ArticleRepository {
             qb.push("a.status = ").push_bind(status);
         }
 
-        if let Some(category_public_id) = filter.category_public_id {
+        if let Some(category_id) = filter.category_id {
             push_condition(qb);
-            qb.push("c.public_id = ").push_bind(category_public_id);
+            qb.push("a.category_id = ").push_bind(category_id);
         }
 
         if let Some(title_contains) = filter.title_contains.clone() {
@@ -66,12 +66,6 @@ impl IArticleRepository for ArticleRepository {
     async fn create(&self, user_id: Uuid, new_article: NewArticle) -> anyhow::Result<Article> {
         let article = sqlx::query_as::<_, Article>(
             r#"
-            WITH category AS (
-                    SELECT id FROM categories WHERE public_id = $4
-                ),
-                usr AS (
-                    SELECT id FROM users WHERE public_id = $5
-                )
             INSERT INTO articles (
                 title,
                 body,
@@ -79,21 +73,14 @@ impl IArticleRepository for ArticleRepository {
                 category_id,
                 user_id
             )
-            SELECT
-                $1,
-                $2,
-                $3,
-                category.id,
-                usr.id
-            FROM category
-            RIGHT JOIN usr ON TRUE
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING
-                public_id,
-                $5 AS user_public_id,
+                id,
+                user_id,
                 title,
                 body,
                 status,
-                $4 AS category_public_id,
+                category_id,
                 created_at,
                 updated_at
             "#,
@@ -101,7 +88,7 @@ impl IArticleRepository for ArticleRepository {
         .bind(new_article.title)
         .bind(new_article.body)
         .bind(new_article.status)
-        .bind(new_article.category_public_id)
+        .bind(new_article.category_id)
         .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
@@ -117,27 +104,23 @@ impl IArticleRepository for ArticleRepository {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                a.public_id,
-                u.public_id as user_public_id,
+                a.id,
+                a.user_id,
                 a.title,
                 a.body,
                 a.status,
-                c.public_id as category_public_id,
+                a.category_id,
                 a.created_at,
                 a.updated_at
             FROM articles AS a
-            LEFT JOIN categories AS c
-            ON a.category_id = c.id
-            LEFT JOIN users AS u
-            ON a.user_id = u.id
-            WHERE a.public_id =
+            WHERE a.id =
             "#,
         );
 
         qb.push_bind(article_id);
 
         if let Some(user_id) = article_filter.user_id {
-            qb.push(" AND u.public_id = ").push_bind(user_id);
+            qb.push(" AND a.user_id = ").push_bind(user_id);
         }
 
         if let Some(status) = article_filter.status {
@@ -165,17 +148,15 @@ impl IArticleRepository for ArticleRepository {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                a.public_id,
-                u.public_id AS user_public_id,
+                a.id,
+                a.user_id,
                 a.title,
                 a.body,
                 a.status,
-                c.public_id AS category_public_id,
+                a.category_id,
                 a.created_at,
                 a.updated_at
             FROM articles AS a
-            LEFT JOIN categories AS c ON a.category_id = c.id
-            LEFT JOIN users AS u ON a.user_id = u.id
             "#,
         );
 
@@ -188,23 +169,29 @@ impl IArticleRepository for ArticleRepository {
         because each is validated to prevent conflicts.
         */
         if let Some(cursor) = pagination.cursor {
-            // get the id of the article with the given public_id
-            let cid_option =
-                sqlx::query_scalar::<_, i32>("SELECT id FROM articles WHERE public_id = $1")
-                    .bind(cursor)
-                    .fetch_optional(&self.pool)
-                    .await?;
+            // get the created_at of the article with the given id
+            let cursor_ts = sqlx::query_scalar::<
+                _,
+                sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>,
+            >("SELECT created_at FROM articles WHERE id = $1")
+            .bind(cursor)
+            .fetch_optional(&self.pool)
+            .await?;
 
-            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
+            let cursor_ts = cursor_ts.ok_or(RepositoryError::NotFound)?;
             if has_condition {
                 qb.push(" AND ");
             } else {
                 qb.push(" WHERE ");
             }
-            qb.push("a.id < ").push_bind(cid);
+            qb.push("(a.created_at, a.id) < (")
+                .push_bind(cursor_ts)
+                .push(", ")
+                .push_bind(cursor)
+                .push(")");
         }
 
-        qb.push(" ORDER BY a.id DESC");
+        qb.push(" ORDER BY a.created_at DESC, a.id DESC");
 
         if let Some(offset) = pagination.offset {
             qb.push(" OFFSET ").push_bind(offset);
@@ -220,8 +207,6 @@ impl IArticleRepository for ArticleRepository {
             SELECT
                 COUNT(*)
             FROM articles AS a
-            LEFT JOIN categories AS c ON a.category_id = c.id
-            LEFT JOIN users AS u ON a.user_id = u.id
             "#,
         );
         // build conditions
@@ -247,16 +232,16 @@ impl IArticleRepository for ArticleRepository {
                 title = $1,
                 body = $2,
                 status = $3,
-                category_id = (SELECT id FROM categories WHERE public_id = $4),
+                category_id = $4,
                 updated_at = now()
-            WHERE public_id = $5
+            WHERE id = $5
             RETURNING
-                public_id,
-                $6 AS user_public_id,
+                id,
+                user_id,
                 title,
                 body,
                 status,
-                $4 AS category_public_id,
+                category_id,
                 created_at,
                 updated_at
             ;
@@ -273,9 +258,8 @@ impl IArticleRepository for ArticleRepository {
                 .unwrap_or(pre_payload.body.unwrap_or_default()),
         )
         .bind(update_article.status.unwrap_or(pre_payload.status))
-        .bind(update_article.category_public_id)
+        .bind(update_article.category_id)
         .bind(article_id)
-        .bind(pre_payload.user_public_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -286,7 +270,7 @@ impl IArticleRepository for ArticleRepository {
         sqlx::query(
             r#"
             DELETE FROM articles
-            WHERE public_id = $1
+            WHERE id = $1
             ;
             "#,
         )
@@ -305,38 +289,20 @@ impl IArticleRepository for ArticleRepository {
         let mut tx = self.pool.begin().await?;
 
         // delete all tags for the article
-        sqlx::query(
-            r#"
-            DELETE FROM article_tags
-            WHERE article_id = (
-                SELECT id FROM articles
-                WHERE public_id = $1
-            );
-            "#,
-        )
-        .bind(article_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
-        })?;
+        sqlx::query("DELETE FROM tagged_articles WHERE article_id = $1")
+            .bind(article_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => RepositoryError::NotFound,
+                e => RepositoryError::Unexpected(e.to_string()),
+            })?;
 
-        // buck insert new tags
+        // bulk insert new tags
         sqlx::query(
             r#"
-            WITH target_article AS (
-                    SELECT id FROM articles
-                    WHERE public_id = $1
-                ),
-                target_tags AS (
-                    SELECT id FROM tags
-                    WHERE public_id = ANY($2)
-                )
-            INSERT INTO article_tags (article_id, tag_id)
-            SELECT target_article.id, u.tag_id
-            FROM target_article
-            CROSS JOIN UNNEST(ARRAY(SELECT id FROM target_tags)) AS u(tag_id)
+            INSERT INTO tagged_articles (article_id, tag_id)
+            SELECT $1, tag_id FROM UNNEST($2::uuid[]) AS tag_id
             ;
             "#,
         )
@@ -389,7 +355,7 @@ mod test {
             title: Some(title.to_string()),
             body: Some(body.to_string()),
             status,
-            category_public_id: None,
+            category_id: None,
         };
         repository.create(user_id, payload).await.unwrap()
     }
@@ -446,7 +412,7 @@ mod test {
                             let _ = sqlx::query(
                                 r#"
                                     DELETE FROM tags
-                                    WHERE public_id = $1
+                                    WHERE id = $1
                                     ;
                                     "#,
                             )
@@ -471,16 +437,16 @@ mod test {
             title: Some(unique_title.clone()),
             body: Some("test body".to_string()),
             status: ArticleStatus::Draft,
-            category_public_id: None,
+            category_id: None,
         };
 
         let article = repository.create(user_id, payload.clone()).await.unwrap();
-        guard.track_article(article.public_id);
+        guard.track_article(article.id);
 
         assert_eq!(article.title, payload.title);
         assert_eq!(article.body, payload.body);
         assert_eq!(article.status, payload.status);
-        assert_eq!(article.user_public_id, user_id);
+        assert_eq!(article.user_id, user_id);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -498,14 +464,14 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article.public_id);
+        guard.track_article(article.id);
 
         let found_article = repository
-            .find(article.public_id, ArticleFilter::default())
+            .find(article.id, ArticleFilter::default())
             .await
             .unwrap();
 
-        assert_eq!(found_article.public_id, article.public_id);
+        assert_eq!(found_article.id, article.id);
         assert_eq!(found_article.title, article.title);
         assert_eq!(found_article.body, article.body);
         assert_eq!(found_article.status, article.status);
@@ -526,11 +492,11 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article.public_id);
+        guard.track_article(article.id);
 
         let found_article = repository
             .find(
-                article.public_id,
+                article.id,
                 ArticleFilter {
                     user_id: Some(user_id),
                     ..Default::default()
@@ -539,7 +505,7 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(found_article.user_public_id, user_id);
+        assert_eq!(found_article.user_id, user_id);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -558,7 +524,7 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article1.public_id);
+        guard.track_article(article1.id);
 
         let article2 = create_test_article(
             &repository,
@@ -568,7 +534,7 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article2.public_id);
+        guard.track_article(article2.id);
 
         let article3 = create_test_article(
             &repository,
@@ -578,7 +544,7 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article3.public_id);
+        guard.track_article(article3.id);
 
         // Test: fetch with pagination (per_page = 2)
         let (articles, total) = repository
@@ -598,8 +564,8 @@ mod test {
         assert_eq!(articles.len(), 2);
         assert!(total.value() >= 3);
         // Articles should be in DESC order (newest first)
-        assert_eq!(articles[0].public_id, article3.public_id);
-        assert_eq!(articles[1].public_id, article2.public_id);
+        assert_eq!(articles[0].id, article3.id);
+        assert_eq!(articles[1].id, article2.id);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -618,7 +584,7 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article1.public_id);
+        guard.track_article(article1.id);
 
         let unique_title2 = format!("test title2 {}", Uuid::new_v4());
         let article2 = create_test_article(
@@ -629,7 +595,7 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article2.public_id);
+        guard.track_article(article2.id);
 
         let unique_title3 = format!("test title3 {}", Uuid::new_v4());
         let article3 = create_test_article(
@@ -640,7 +606,7 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article3.public_id);
+        guard.track_article(article3.id);
 
         // Test: fetch with cursor pagination
         let (articles, _) = repository
@@ -650,7 +616,7 @@ mod test {
                     ..Default::default()
                 },
                 Pagination {
-                    cursor: Some(article3.public_id),
+                    cursor: Some(article3.id),
                     per_page: 2,
                     ..Pagination::default()
                 },
@@ -660,8 +626,8 @@ mod test {
 
         // Should get articles before the cursor (article2 and article1)
         assert_eq!(articles.len(), 2);
-        assert_eq!(articles[0].public_id, article2.public_id);
-        assert_eq!(articles[1].public_id, article1.public_id);
+        assert_eq!(articles[0].id, article2.id);
+        assert_eq!(articles[1].id, article1.id);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -680,7 +646,7 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article.public_id);
+        guard.track_article(article.id);
 
         // Test: update the article
         let update_unique_title = format!("updated title {}", Uuid::new_v4());
@@ -688,18 +654,15 @@ mod test {
             title: Some(update_unique_title.to_string()),
             body: Some("updated body".to_string()),
             status: Some(ArticleStatus::Published),
-            category_public_id: None,
+            category_id: None,
         };
 
-        let updated_article = repository
-            .update(article.public_id, update_payload)
-            .await
-            .unwrap();
+        let updated_article = repository.update(article.id, update_payload).await.unwrap();
 
         assert_eq!(updated_article.title, Some(update_unique_title.to_string()));
         assert_eq!(updated_article.body, Some("updated body".to_string()));
         assert_eq!(updated_article.status, ArticleStatus::Published);
-        assert_eq!(updated_article.public_id, article.public_id);
+        assert_eq!(updated_article.id, article.id);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -717,12 +680,10 @@ mod test {
         )
         .await;
 
-        repository.delete(article.public_id).await.unwrap();
+        repository.delete(article.id).await.unwrap();
 
         // Verify deletion
-        let result = repository
-            .find(article.public_id, ArticleFilter::default())
-            .await;
+        let result = repository.find(article.id, ArticleFilter::default()).await;
         assert!(result.is_err());
     }
 
@@ -741,11 +702,11 @@ mod test {
             ArticleStatus::Draft,
         )
         .await;
-        guard.track_article(article.public_id);
+        guard.track_article(article.id);
 
         // Setup: create test tags
         let tag1_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, (SELECT id FROM users WHERE public_id = $2)) RETURNING public_id",
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind("tag1")
         .bind(user_id)
@@ -755,7 +716,7 @@ mod test {
         guard.track_tag(tag1_id);
 
         let tag2_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, (SELECT id FROM users WHERE public_id = $2)) RETURNING public_id",
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind("tag2")
         .bind(user_id)
@@ -766,22 +727,21 @@ mod test {
 
         // Test: attach tags to article
         repository
-            .attach_tags(article.public_id, vec![tag1_id, tag2_id])
+            .attach_tags(article.id, vec![tag1_id, tag2_id])
             .await
             .unwrap();
 
         // Verify: check tags are attached
         let attached_tags = sqlx::query_scalar::<_, Uuid>(
             r#"
-            SELECT t.public_id
-            FROM article_tags at
-            JOIN tags t ON at.tag_id = t.id
-            JOIN articles a ON at.article_id = a.id
-            WHERE a.public_id = $1
-            ORDER BY t.public_id
+            SELECT t.id
+            FROM tagged_articles ta
+            JOIN tags t ON ta.tag_id = t.id
+            WHERE ta.article_id = $1
+            ORDER BY t.id
             "#,
         )
-        .bind(article.public_id)
+        .bind(article.id)
         .fetch_all(&pool)
         .await
         .unwrap();
@@ -792,20 +752,19 @@ mod test {
 
         // Test: re-attach with different tags (should replace)
         repository
-            .attach_tags(article.public_id, vec![tag1_id])
+            .attach_tags(article.id, vec![tag1_id])
             .await
             .unwrap();
 
         let attached_tags_after = sqlx::query_scalar::<_, Uuid>(
             r#"
-            SELECT t.public_id
-            FROM article_tags at
-            JOIN tags t ON at.tag_id = t.id
-            JOIN articles a ON at.article_id = a.id
-            WHERE a.public_id = $1
+            SELECT t.id
+            FROM tagged_articles ta
+            JOIN tags t ON ta.tag_id = t.id
+            WHERE ta.article_id = $1
             "#,
         )
-        .bind(article.public_id)
+        .bind(article.id)
         .fetch_all(&pool)
         .await
         .unwrap();

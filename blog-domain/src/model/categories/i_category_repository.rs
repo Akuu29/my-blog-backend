@@ -13,13 +13,11 @@ use validator::Validate;
 #[serde(rename_all = "camelCase")]
 pub struct CategoryFilter {
     #[serde_as(as = "Option<DisplayFromStr>")]
-    #[serde(rename = "id")]
-    pub public_id: Option<Uuid>,
+    pub id: Option<Uuid>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub name: Option<String>,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    #[serde(rename = "userId")]
-    pub user_public_id: Option<Uuid>,
+    pub user_id: Option<Uuid>,
 }
 
 #[async_trait]

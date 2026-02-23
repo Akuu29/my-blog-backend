@@ -75,7 +75,7 @@ impl IUserRepository for UserRepository {
                 is_primary
             )
             VALUES (
-                (SELECT id FROM users WHERE public_id = $1),
+                $1,
                 (SELECT id FROM identity_providers WHERE name = $2),
                 $3,
                 $4,
@@ -86,7 +86,7 @@ impl IUserRepository for UserRepository {
             );
             "#,
         )
-        .bind(user.public_id)
+        .bind(user.id)
         .bind(payload.identity.provider_name)
         .bind(payload.identity.provider_user_id)
         .bind(payload.identity.provider_email_cipher.ciphertext)
@@ -110,7 +110,7 @@ impl IUserRepository for UserRepository {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                public_id,
+                id,
                 name,
                 role,
                 is_active,
@@ -130,23 +130,28 @@ impl IUserRepository for UserRepository {
         because each is validated to prevent conflicts.
         */
         if let Some(cursor) = pagination.cursor {
-            // get the id of the user with the given public_id
-            let cid_option =
-                sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE public_id = $1")
-                    .bind(cursor)
-                    .fetch_optional(&self.pool)
-                    .await?;
+            // get the created_at of the user with the given id
+            let cursor_data = sqlx::query_as::<_, (sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>,)>(
+                "SELECT created_at FROM users WHERE id = $1",
+            )
+            .bind(cursor)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(RepositoryError::NotFound)?;
 
-            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
                 qb.push(" AND ");
             } else {
                 qb.push(" WHERE ");
             }
-            qb.push("id < ").push_bind(cid);
+            qb.push("(created_at, id) < (")
+                .push_bind(cursor_data.0)
+                .push(", ")
+                .push_bind(cursor)
+                .push(")");
         }
 
-        qb.push(" ORDER BY id DESC");
+        qb.push(" ORDER BY created_at DESC, id DESC");
 
         if let Some(offset) = pagination.offset {
             qb.push(" OFFSET ").push_bind(offset);
@@ -177,7 +182,7 @@ impl IUserRepository for UserRepository {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT
-                public_id,
+                id,
                 name,
                 role,
                 is_active,
@@ -185,7 +190,7 @@ impl IUserRepository for UserRepository {
                 created_at,
                 updated_at
             FROM users
-            WHERE public_id = $1;
+            WHERE id = $1;
             "#,
         )
         .bind(user_id)
@@ -203,7 +208,7 @@ impl IUserRepository for UserRepository {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT
-                u.public_id,
+                u.id,
                 u.name,
                 u.role,
                 u.is_active,
@@ -234,7 +239,7 @@ impl IUserRepository for UserRepository {
         let user = sqlx::query_as::<_, User>(
             r#"
             UPDATE users set name = $1
-            WHERE public_id = $2
+            WHERE id = $2
             RETURNING *;
             "#,
         )
@@ -250,7 +255,7 @@ impl IUserRepository for UserRepository {
         sqlx::query(
             r#"
             DELETE FROM users
-            WHERE public_id = $1;
+            WHERE id = $1;
             "#,
         )
         .bind(user_id)
@@ -376,7 +381,7 @@ mod test {
         );
 
         let user = repository.create(new_user).await.unwrap();
-        guard.track(user.public_id);
+        guard.track(user.id);
 
         assert!(!user.name.is_empty());
         assert_eq!(user.role, UserRole::User);
@@ -390,11 +395,11 @@ mod test {
         let mut guard = TestUserGuard::new(&repository);
 
         let user = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
-        guard.track(user.public_id);
+        guard.track(user.id);
 
-        let found_user = repository.find(user.public_id).await.unwrap();
+        let found_user = repository.find(user.id).await.unwrap();
 
-        assert_eq!(found_user.public_id, user.public_id);
+        assert_eq!(found_user.id, user.id);
         assert_eq!(found_user.name, user.name);
     }
 
@@ -411,14 +416,14 @@ mod test {
         let new_user = NewUser::new("test-idp", &provider_sub, email_cipher, email_hash, true);
 
         let user = repository.create(new_user).await.unwrap();
-        guard.track(user.public_id);
+        guard.track(user.id);
 
         let found_user = repository
             .find_by_user_identity("test-idp", &provider_sub)
             .await
             .unwrap();
 
-        assert_eq!(found_user.public_id, user.public_id);
+        assert_eq!(found_user.id, user.id);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -428,10 +433,10 @@ mod test {
         let mut guard = TestUserGuard::new(&repository);
 
         let user1 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
-        guard.track(user1.public_id);
+        guard.track(user1.id);
 
         let user2 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
-        guard.track(user2.public_id);
+        guard.track(user2.id);
 
         let filter = UserFilter {
             name_contains: None,
@@ -444,8 +449,8 @@ mod test {
 
         let (users, _) = repository.all(filter, pagination).await.unwrap();
 
-        assert!(users.iter().any(|u| u.public_id == user1.public_id));
-        assert!(users.iter().any(|u| u.public_id == user2.public_id));
+        assert!(users.iter().any(|u| u.id == user1.id));
+        assert!(users.iter().any(|u| u.id == user2.id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -455,13 +460,13 @@ mod test {
         let mut guard = TestUserGuard::new(&repository);
 
         let user1 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
-        guard.track(user1.public_id);
+        guard.track(user1.id);
 
         let user2 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
-        guard.track(user2.public_id);
+        guard.track(user2.id);
 
         let user3 = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
-        guard.track(user3.public_id);
+        guard.track(user3.id);
 
         let filter = UserFilter {
             name_contains: None,
@@ -477,7 +482,7 @@ mod test {
         assert!(first_page.len() >= 2);
 
         // Get second page using cursor
-        let cursor_id = first_page[1].public_id;
+        let cursor_id = first_page[1].id;
         let filter_with_cursor = UserFilter {
             name_contains: None,
         };
@@ -492,7 +497,7 @@ mod test {
             .unwrap();
 
         // Verify cursor works - second page should not contain the cursor user
-        assert!(!second_page.iter().any(|u| u.public_id == cursor_id));
+        assert!(!second_page.iter().any(|u| u.id == cursor_id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -502,7 +507,7 @@ mod test {
         let mut guard = TestUserGuard::new(&repository);
 
         let user = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
-        guard.track(user.public_id);
+        guard.track(user.id);
 
         let new_name = format!("Updated-{}", Uuid::new_v4().to_string()[0..8].to_string());
         let update_payload = UpdateUser {
@@ -510,11 +515,11 @@ mod test {
         };
 
         let updated_user = repository
-            .update(user.public_id, update_payload)
+            .update(user.id, update_payload)
             .await
             .unwrap();
 
-        assert_eq!(updated_user.public_id, user.public_id);
+        assert_eq!(updated_user.id, user.id);
         assert_eq!(updated_user.name, new_name);
     }
 
@@ -525,12 +530,12 @@ mod test {
         let mut guard = TestUserGuard::new(&repository);
 
         let user = create_test_user(&repository, &Uuid::new_v4().to_string()).await;
-        guard.track(user.public_id);
+        guard.track(user.id);
 
-        repository.delete(user.public_id).await.unwrap();
+        repository.delete(user.id).await.unwrap();
 
         // Verify deletion
-        let result = repository.find(user.public_id).await;
+        let result = repository.find(user.id).await;
         assert!(result.is_err());
     }
 }

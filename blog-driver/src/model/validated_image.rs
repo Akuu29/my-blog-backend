@@ -111,7 +111,7 @@ where
             )
         })?;
 
-        let article_public_id = article_id
+        let article_id_parsed = article_id
             .ok_or_else(|| {
                 api_error_response(
                     ErrorCode::InvalidInput,
@@ -135,7 +135,7 @@ where
             data: file_data,
             url: None,
             storage_type: StorageType::Database,
-            article_public_id,
+            article_id: article_id_parsed,
         };
 
         new_image.validate().map_err(|e| {

@@ -47,11 +47,12 @@ where
 
     pub async fn create(
         &self,
-        user_public_id: Option<Uuid>,
+        user_id: Option<Uuid>,
+        user_name: String,
         payload: NewComment,
     ) -> Result<Comment, CommentUsecaseError> {
         self.repository
-            .create(user_public_id, payload)
+            .create(user_id, user_name, payload)
             .await
             .map_err(|e| CommentUsecaseError::RepositoryError(e.to_string()))
     }
@@ -77,12 +78,12 @@ where
     pub async fn update_with_auth(
         &self,
         comment_id: Uuid,
-        user_public_id: Uuid,
+        user_id: Uuid,
         payload: UpdateComment,
     ) -> Result<Comment, CommentUsecaseError> {
         // Verify ownership using domain service
         self.comment_service
-            .verify_ownership(comment_id, user_public_id)
+            .verify_ownership(comment_id, user_id)
             .await?;
 
         self.repository
@@ -94,11 +95,11 @@ where
     pub async fn delete_with_auth(
         &self,
         comment_id: Uuid,
-        user_public_id: Uuid,
+        user_id: Uuid,
     ) -> Result<(), CommentUsecaseError> {
         // Verify ownership using domain service
         self.comment_service
-            .verify_ownership(comment_id, user_public_id)
+            .verify_ownership(comment_id, user_id)
             .await?;
 
         self.repository

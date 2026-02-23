@@ -6,8 +6,7 @@ use uuid::Uuid;
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageFilter {
-    #[serde(rename = "articleId")]
-    pub article_public_id: Option<Uuid>,
+    pub article_id: Option<Uuid>,
 }
 
 #[async_trait]

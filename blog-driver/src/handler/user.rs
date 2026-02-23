@@ -201,7 +201,7 @@ where
         users.pop();
     }
 
-    let next_cursor = users.last().map(|user| user.public_id).or(None);
+    let next_cursor = users.last().map(|user| user.id).or(None);
     let paged_body = PagedBody::new(users, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(

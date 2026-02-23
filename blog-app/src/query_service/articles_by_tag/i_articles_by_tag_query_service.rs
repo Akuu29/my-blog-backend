@@ -16,8 +16,7 @@ pub struct ArticlesByTagFilter {
     #[serde(default)]
     pub tag_ids: Vec<Uuid>,
     #[serde_as(as = "Option<DisplayFromStr>")]
-    #[serde(rename = "userId")]
-    pub user_public_id: Option<Uuid>,
+    pub user_id: Option<Uuid>,
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub article_status: Option<ArticleStatus>,
 }
