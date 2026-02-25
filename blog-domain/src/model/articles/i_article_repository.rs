@@ -4,21 +4,15 @@ use crate::model::{
 };
 use async_trait::async_trait;
 use serde::Deserialize;
-use serde_with::{DisplayFromStr, serde_as};
 use sqlx::types::Uuid;
 use validator::Validate;
 
-#[serde_as]
 #[derive(Debug, Default, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct ArticleFilter {
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub user_id: Option<Uuid>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub status: Option<ArticleStatus>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub category_id: Option<Uuid>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
     #[validate(length(max = 100, message = "title_contains length must be 100 or less"))]
     pub title_contains: Option<String>,
 }

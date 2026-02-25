@@ -4,19 +4,14 @@ use crate::model::{
 };
 use async_trait::async_trait;
 use serde::Deserialize;
-use serde_with::{DisplayFromStr, serde_as};
 use uuid::Uuid;
 use validator::Validate;
 
-#[serde_as]
 #[derive(Debug, Default, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentFilter {
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub article_id: Option<Uuid>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub user_id: Option<Uuid>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub user_name: Option<String>,
 }
 
