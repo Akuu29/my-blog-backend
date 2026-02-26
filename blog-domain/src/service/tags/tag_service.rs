@@ -21,14 +21,14 @@ where
     pub async fn verify_ownership(
         &self,
         tag_id: Uuid,
-        user_public_id: Uuid,
+        user_id: Uuid,
     ) -> Result<(), TagServiceError> {
         let tag = self.repository.find(tag_id).await.map_err(|_| {
             // TODO Propagation of repository errors.
             TagServiceError::NotFound
         })?;
 
-        if tag.user_public_id != user_public_id {
+        if tag.user_id != user_id {
             return Err(TagServiceError::Unauthorized);
         }
 

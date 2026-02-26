@@ -20,15 +20,14 @@ impl ITagsAttachedArticleQueryService for TagsAttachedArticleQueryService {
         let tags = sqlx::query_as::<_, Tag>(
             r#"
             SELECT
-                t.public_id AS public_id,
-                u.public_id AS user_public_id,
-                t.name AS name,
-                t.created_at AS created_at,
-                t.updated_at AS updated_at
+                t.id,
+                t.user_id,
+                t.name,
+                t.created_at,
+                t.updated_at
             FROM tags AS t
-            INNER JOIN users AS u ON t.user_id = u.id
-            INNER JOIN article_tags AS at ON t.id = at.tag_id
-            WHERE at.article_id = (SELECT id FROM articles WHERE public_id = $1)
+            INNER JOIN tagged_articles AS ta ON t.id = ta.tag_id
+            WHERE ta.article_id = $1
             "#,
         )
         .bind(article_id)
@@ -58,9 +57,22 @@ mod test {
         ));
         let query_service = TagsAttachedArticleQueryService::new(pool.clone());
 
-        // Get test user public_id (UUID)
-        let user_public_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
-        let user_uuid = uuid::Uuid::parse_str(&user_public_id).expect("invalid TEST_USER_ID UUID");
+        // Get test user UUID
+        let user_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
+        let user_uuid = uuid::Uuid::parse_str(&user_id).expect("invalid TEST_USER_ID UUID");
+
+        // Ensure the test user exists (required by foreign key constraints)
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, name)
+            VALUES ($1, 'test-user')
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(user_uuid)
+        .execute(&pool)
+        .await
+        .expect("failed to ensure test user exists");
 
         (pool, query_service, user_uuid)
     }
@@ -101,19 +113,18 @@ mod test {
             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 tokio::task::block_in_place(|| {
                     handle.block_on(async move {
-                        // Cleanup article_tags (junction table) first
+                        // Cleanup tagged_articles (junction table) first
                         for article_id in &article_ids {
-                            let _ = sqlx::query(
-                                "DELETE FROM article_tags WHERE article_id = (SELECT id FROM articles WHERE public_id = $1)"
-                            )
-                            .bind(article_id)
-                            .execute(&pool)
-                            .await;
+                            let _ =
+                                sqlx::query("DELETE FROM tagged_articles WHERE article_id = $1")
+                                    .bind(article_id)
+                                    .execute(&pool)
+                                    .await;
                         }
 
                         // Then cleanup articles
                         for article_id in &article_ids {
-                            let _ = sqlx::query("DELETE FROM articles WHERE public_id = $1")
+                            let _ = sqlx::query("DELETE FROM articles WHERE id = $1")
                                 .bind(article_id)
                                 .execute(&pool)
                                 .await;
@@ -121,7 +132,7 @@ mod test {
 
                         // Finally cleanup tags
                         for tag_id in &tag_ids {
-                            let _ = sqlx::query("DELETE FROM tags WHERE public_id = $1")
+                            let _ = sqlx::query("DELETE FROM tags WHERE id = $1")
                                 .bind(tag_id)
                                 .execute(&pool)
                                 .await;
@@ -138,61 +149,54 @@ mod test {
         let (pool, query_service, user_uuid) = setup().await;
         let mut guard = TestDataGuard::new(&pool);
 
-        // Get internal user_id
-        let user_id = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE public_id = $1")
-            .bind(user_uuid)
-            .fetch_one(&pool)
-            .await
-            .expect("failed to get user_id");
-
         // Create article
-        let article_public_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING public_id",
+        let article_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING id",
         )
         .bind(format!("Article {}", Uuid::new_v4()))
         .bind("Test Body")
         .bind(ArticleStatus::Draft)
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .expect("failed to create article");
-        guard.track_article(article_public_id);
+        guard.track_article(article_id);
 
         // Create multiple tags
         let tag1_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING public_id",
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind(format!(
             "tag1-{}",
             Uuid::new_v4().to_string()[0..8].to_string()
         ))
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .unwrap();
         guard.track_tag(tag1_id);
 
         let tag2_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING public_id",
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind(format!(
             "tag2-{}",
             Uuid::new_v4().to_string()[0..8].to_string()
         ))
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .unwrap();
         guard.track_tag(tag2_id);
 
         let tag3_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING public_id",
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind(format!(
             "tag3-{}",
             Uuid::new_v4().to_string()[0..8].to_string()
         ))
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -200,26 +204,24 @@ mod test {
 
         // Attach tags to article
         for tag_id in &[tag1_id, tag2_id, tag3_id] {
-            sqlx::query(
-                "INSERT INTO article_tags (article_id, tag_id) VALUES ((SELECT id FROM articles WHERE public_id = $1), (SELECT id FROM tags WHERE public_id = $2))",
-            )
-            .bind(article_public_id)
-            .bind(tag_id)
-            .execute(&pool)
-            .await
-            .unwrap();
+            sqlx::query("INSERT INTO tagged_articles (article_id, tag_id) VALUES ($1, $2)")
+                .bind(article_id)
+                .bind(tag_id)
+                .execute(&pool)
+                .await
+                .unwrap();
         }
 
         // Test: Find tags by article ID
         let tags = query_service
-            .find_tags_by_article_id(article_public_id)
+            .find_tags_by_article_id(article_id)
             .await
             .unwrap();
 
         assert_eq!(tags.len(), 3);
-        assert!(tags.iter().any(|t| t.public_id == tag1_id));
-        assert!(tags.iter().any(|t| t.public_id == tag2_id));
-        assert!(tags.iter().any(|t| t.public_id == tag3_id));
+        assert!(tags.iter().any(|t| t.id == tag1_id));
+        assert!(tags.iter().any(|t| t.id == tag2_id));
+        assert!(tags.iter().any(|t| t.id == tag3_id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -228,29 +230,22 @@ mod test {
         let (pool, query_service, user_uuid) = setup().await;
         let mut guard = TestDataGuard::new(&pool);
 
-        // Get internal user_id
-        let user_id = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE public_id = $1")
-            .bind(user_uuid)
-            .fetch_one(&pool)
-            .await
-            .expect("failed to get user_id");
-
         // Create article without any tags
-        let article_public_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING public_id",
+        let article_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING id",
         )
         .bind(format!("Article {}", Uuid::new_v4()))
         .bind("Test Body")
         .bind(ArticleStatus::Draft)
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .expect("failed to create article");
-        guard.track_article(article_public_id);
+        guard.track_article(article_id);
 
         // Test: Should return empty vector
         let tags = query_service
-            .find_tags_by_article_id(article_public_id)
+            .find_tags_by_article_id(article_id)
             .await
             .unwrap();
 

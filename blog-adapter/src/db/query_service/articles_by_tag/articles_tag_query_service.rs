@@ -25,8 +25,8 @@ impl ArticlesByTagQueryService {
         qb: &mut QueryBuilder<'_, sqlx::Postgres>,
         filter: &ArticlesByTagFilter,
     ) {
-        if let Some(user_public_id) = filter.user_public_id {
-            qb.push(" AND u.public_id = ").push_bind(user_public_id);
+        if let Some(user_id) = filter.user_id {
+            qb.push(" AND a.user_id = ").push_bind(user_id);
         }
         if let Some(article_status) = filter.article_status {
             qb.push(" AND a.status = ").push_bind(article_status);
@@ -44,37 +44,25 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
         // find articles
         let mut qb = QueryBuilder::new(
             r#"
-            WITH tag_ids AS (
-                SELECT id
-                FROM tags
-                WHERE public_id = ANY(
-            "#,
-        );
-        qb.push_bind(&filter.tag_ids);
-        qb.push(") ");
-
-        qb.push(
-            r#"
-            )
             SELECT
-                a.public_id,
-                u.public_id as user_public_id,
+                a.id,
+                a.user_id,
                 a.title,
                 a.body,
-                status,
-                (SELECT public_id FROM categories WHERE id = category_id) as category_public_id,
+                a.status,
+                a.category_id,
                 a.created_at,
                 a.updated_at
             FROM articles AS a
-            LEFT JOIN users AS u ON a.user_id = u.id
             WHERE EXISTS (
                 SELECT 1
-                FROM article_tags AS at
-                WHERE at.article_id = a.id
-                AND at.tag_id IN (SELECT id FROM tag_ids)
-            )
+                FROM tagged_articles AS ta
+                WHERE ta.article_id = a.id
+                AND ta.tag_id = ANY(
             "#,
         );
+        qb.push_bind(&filter.tag_ids);
+        qb.push(") )");
 
         // build conditions
         self.push_article_condition(&mut qb, &filter);
@@ -85,18 +73,23 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
         because each is validated to prevent conflicts.
         */
         if let Some(cursor) = pagination.cursor {
-            // get the id of the article with the given public_id
-            let cid_option =
-                sqlx::query_scalar::<_, i32>("SELECT id FROM articles WHERE public_id = $1")
-                    .bind(cursor)
-                    .fetch_optional(&self.pool)
-                    .await?;
+            let cursor_ts = sqlx::query_scalar::<
+                _,
+                sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>,
+            >("SELECT created_at FROM articles WHERE id = $1")
+            .bind(cursor)
+            .fetch_optional(&self.pool)
+            .await?;
 
-            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
-            qb.push(" AND a.id < ").push_bind(cid);
+            let cursor_ts = cursor_ts.ok_or(RepositoryError::NotFound)?;
+            qb.push(" AND (a.created_at, a.id) < (")
+                .push_bind(cursor_ts)
+                .push(", ")
+                .push_bind(cursor)
+                .push(")");
         }
 
-        qb.push(" ORDER BY a.id DESC");
+        qb.push(" ORDER BY a.created_at DESC, a.id DESC");
 
         if let Some(offset) = pagination.offset {
             qb.push(" OFFSET ").push_bind(offset);
@@ -109,29 +102,17 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
         // count total articles
         let mut qb = QueryBuilder::new(
             r#"
-            WITH tag_ids AS (
-                SELECT id
-                FROM tags
-                WHERE public_id = ANY(
+            SELECT COUNT(*)
+            FROM articles AS a
+            WHERE EXISTS (
+                SELECT 1
+                FROM tagged_articles AS ta
+                WHERE ta.article_id = a.id
+                AND ta.tag_id = ANY(
             "#,
         );
         qb.push_bind(&filter.tag_ids);
-        qb.push(") ");
-
-        qb.push(
-            r#"
-            )
-            SELECT COUNT(*)
-            FROM articles AS a
-            LEFT JOIN users AS u ON a.user_id = u.id
-            WHERE EXISTS (
-                SELECT 1
-                FROM article_tags AS at
-                WHERE at.article_id = a.id
-                AND at.tag_id IN (SELECT id FROM tag_ids)
-            )
-            "#,
-        );
+        qb.push(") )");
 
         // build conditions
         self.push_article_condition(&mut qb, &filter);
@@ -165,9 +146,22 @@ mod test {
         ));
         let query_service = ArticlesByTagQueryService::new(pool.clone());
 
-        // Get test user public_id (UUID)
-        let user_public_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
-        let user_uuid = uuid::Uuid::parse_str(&user_public_id).expect("invalid TEST_USER_ID UUID");
+        // Get test user UUID
+        let user_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
+        let user_uuid = uuid::Uuid::parse_str(&user_id).expect("invalid TEST_USER_ID UUID");
+
+        // Ensure the test user exists (required by foreign key constraints)
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, name)
+            VALUES ($1, 'test-user')
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(user_uuid)
+        .execute(&pool)
+        .await
+        .expect("failed to ensure test user exists");
 
         (pool, query_service, user_uuid)
     }
@@ -208,19 +202,18 @@ mod test {
             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 tokio::task::block_in_place(|| {
                     handle.block_on(async move {
-                        // Cleanup article_tags (junction table) first
+                        // Cleanup tagged_articles (junction table) first
                         for article_id in &article_ids {
-                            let _ = sqlx::query(
-                                "DELETE FROM article_tags WHERE article_id = (SELECT id FROM articles WHERE public_id = $1)"
-                            )
-                            .bind(article_id)
-                            .execute(&pool)
-                            .await;
+                            let _ =
+                                sqlx::query("DELETE FROM tagged_articles WHERE article_id = $1")
+                                    .bind(article_id)
+                                    .execute(&pool)
+                                    .await;
                         }
 
                         // Then cleanup articles
                         for article_id in &article_ids {
-                            let _ = sqlx::query("DELETE FROM articles WHERE public_id = $1")
+                            let _ = sqlx::query("DELETE FROM articles WHERE id = $1")
                                 .bind(article_id)
                                 .execute(&pool)
                                 .await;
@@ -228,7 +221,7 @@ mod test {
 
                         // Finally cleanup tags
                         for tag_id in &tag_ids {
-                            let _ = sqlx::query("DELETE FROM tags WHERE public_id = $1")
+                            let _ = sqlx::query("DELETE FROM tags WHERE id = $1")
                                 .bind(tag_id)
                                 .execute(&pool)
                                 .await;
@@ -245,60 +238,45 @@ mod test {
         let (pool, query_service, user_uuid) = setup().await;
         let mut guard = TestDataGuard::new(&pool);
 
-        // Get internal user_id
-        let user_id = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE public_id = $1")
-            .bind(user_uuid)
-            .fetch_one(&pool)
-            .await
-            .expect("failed to get user_id");
-
         // Create a tag
-        let tag_public_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING public_id",
+        let tag_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind(format!(
             "tag-{}",
             Uuid::new_v4().to_string()[0..8].to_string()
         ))
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .expect("failed to create tag");
-        guard.track_tag(tag_public_id);
+        guard.track_tag(tag_id);
 
         // Create article
-        let article_public_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING public_id",
+        let article_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING id",
         )
         .bind(format!("Article {}", Uuid::new_v4()))
         .bind("Test Body")
         .bind(ArticleStatus::Draft)
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .expect("failed to create article");
-        guard.track_article(article_public_id);
+        guard.track_article(article_id);
 
         // Attach tag to article
-        sqlx::query(
-            r#"
-            INSERT INTO article_tags (article_id, tag_id)
-            VALUES (
-                (SELECT id FROM articles WHERE public_id = $1),
-                (SELECT id FROM tags WHERE public_id = $2)
-            )
-            "#,
-        )
-        .bind(article_public_id)
-        .bind(tag_public_id)
-        .execute(&pool)
-        .await
-        .expect("failed to attach tag to article");
+        sqlx::query("INSERT INTO tagged_articles (article_id, tag_id) VALUES ($1, $2)")
+            .bind(article_id)
+            .bind(tag_id)
+            .execute(&pool)
+            .await
+            .expect("failed to attach tag to article");
 
         // Test: Find articles by this tag
         let filter = ArticlesByTagFilter {
-            tag_ids: vec![tag_public_id],
-            user_public_id: None,
+            tag_ids: vec![tag_id],
+            user_id: None,
             article_status: None,
         };
         let pagination = Pagination {
@@ -312,7 +290,7 @@ mod test {
             .await
             .unwrap();
 
-        assert!(articles.iter().any(|a| a.public_id == article_public_id));
+        assert!(articles.iter().any(|a| a.id == article_id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -321,34 +299,28 @@ mod test {
         let (pool, query_service, user_uuid) = setup().await;
         let mut guard = TestDataGuard::new(&pool);
 
-        let user_id = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE public_id = $1")
-            .bind(user_uuid)
-            .fetch_one(&pool)
-            .await
-            .expect("failed to get user_id");
-
         // Create two tags
         let tag1_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING public_id",
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind(format!(
             "tag1-{}",
             Uuid::new_v4().to_string()[0..8].to_string()
         ))
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .unwrap();
         guard.track_tag(tag1_id);
 
         let tag2_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING public_id",
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind(format!(
             "tag2-{}",
             Uuid::new_v4().to_string()[0..8].to_string()
         ))
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -356,12 +328,12 @@ mod test {
 
         // Create article with both tags
         let article_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING public_id",
+            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING id",
         )
         .bind(format!("Article {}", Uuid::new_v4()))
         .bind("Test Body")
         .bind(ArticleStatus::Draft)
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -369,20 +341,18 @@ mod test {
 
         // Attach both tags
         for tag_id in &[tag1_id, tag2_id] {
-            sqlx::query(
-                "INSERT INTO article_tags (article_id, tag_id) VALUES ((SELECT id FROM articles WHERE public_id = $1), (SELECT id FROM tags WHERE public_id = $2))",
-            )
-            .bind(article_id)
-            .bind(tag_id)
-            .execute(&pool)
-            .await
-            .unwrap();
+            sqlx::query("INSERT INTO tagged_articles (article_id, tag_id) VALUES ($1, $2)")
+                .bind(article_id)
+                .bind(tag_id)
+                .execute(&pool)
+                .await
+                .unwrap();
         }
 
         // Test: Find articles by both tags
         let filter = ArticlesByTagFilter {
             tag_ids: vec![tag1_id, tag2_id],
-            user_public_id: None,
+            user_id: None,
             article_status: None,
         };
         let pagination = Pagination {
@@ -396,7 +366,7 @@ mod test {
             .await
             .unwrap();
 
-        assert!(articles.iter().any(|a| a.public_id == article_id));
+        assert!(articles.iter().any(|a| a.id == article_id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -405,21 +375,15 @@ mod test {
         let (pool, query_service, user_uuid) = setup().await;
         let mut guard = TestDataGuard::new(&pool);
 
-        let user_id = sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE public_id = $1")
-            .bind(user_uuid)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-
         // Create tag
         let tag_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING public_id",
+            "INSERT INTO tags (name, user_id) VALUES ($1, $2) RETURNING id",
         )
         .bind(format!(
             "tag-{}",
             Uuid::new_v4().to_string()[0..8].to_string()
         ))
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -427,31 +391,29 @@ mod test {
 
         // Create article by the user
         let article_id = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING public_id",
+            "INSERT INTO articles (title, body, status, user_id) VALUES ($1, $2, $3, $4) RETURNING id",
         )
         .bind(format!("Article {}", Uuid::new_v4()))
         .bind("Test Body")
         .bind(ArticleStatus::Draft)
-        .bind(user_id)
+        .bind(user_uuid)
         .fetch_one(&pool)
         .await
         .unwrap();
         guard.track_article(article_id);
 
         // Attach tag
-        sqlx::query(
-            "INSERT INTO article_tags (article_id, tag_id) VALUES ((SELECT id FROM articles WHERE public_id = $1), (SELECT id FROM tags WHERE public_id = $2))",
-        )
-        .bind(article_id)
-        .bind(tag_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO tagged_articles (article_id, tag_id) VALUES ($1, $2)")
+            .bind(article_id)
+            .bind(tag_id)
+            .execute(&pool)
+            .await
+            .unwrap();
 
         // Test: Find articles by tag AND user
         let filter = ArticlesByTagFilter {
             tag_ids: vec![tag_id],
-            user_public_id: Some(user_uuid),
+            user_id: Some(user_uuid),
             article_status: None,
         };
         let pagination = Pagination {
@@ -465,6 +427,6 @@ mod test {
             .await
             .unwrap();
 
-        assert!(articles.iter().any(|a| a.public_id == article_id));
+        assert!(articles.iter().any(|a| a.id == article_id));
     }
 }

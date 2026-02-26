@@ -9,10 +9,8 @@ use validator::Validate;
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Tag {
-    #[serde(rename = "id")]
-    pub public_id: Uuid,
-    #[serde(rename = "userId")]
-    pub user_public_id: Uuid,
+    pub id: Uuid,
+    pub user_id: Uuid,
     pub name: String,
     pub created_at: DateTime<Local>,
     pub updated_at: DateTime<Local>,

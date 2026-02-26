@@ -104,7 +104,7 @@ where
     if has_next {
         articles.pop();
     }
-    let next_cursor = articles.last().map(|article| article.public_id).or(None);
+    let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(
@@ -235,7 +235,7 @@ where
     if has_next {
         articles.pop();
     }
-    let next_cursor = articles.last().map(|article| article.public_id).or(None);
+    let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(

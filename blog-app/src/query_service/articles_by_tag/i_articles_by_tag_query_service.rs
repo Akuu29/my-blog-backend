@@ -4,21 +4,15 @@ use blog_domain::model::{
     common::{item_count::ItemCount, pagination::Pagination},
 };
 use serde::Deserialize;
-use serde_with::{DisplayFromStr, serde_as};
 use uuid::Uuid;
 use validator::Validate;
 
-#[serde_as]
 #[derive(Debug, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct ArticlesByTagFilter {
-    #[serde_as(as = "Vec<DisplayFromStr>")]
     #[serde(default)]
     pub tag_ids: Vec<Uuid>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
-    #[serde(rename = "userId")]
-    pub user_public_id: Option<Uuid>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub user_id: Option<Uuid>,
     pub article_status: Option<ArticleStatus>,
 }
 

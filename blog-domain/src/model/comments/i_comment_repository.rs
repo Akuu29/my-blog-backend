@@ -4,21 +4,14 @@ use crate::model::{
 };
 use async_trait::async_trait;
 use serde::Deserialize;
-use serde_with::{DisplayFromStr, serde_as};
 use uuid::Uuid;
 use validator::Validate;
 
-#[serde_as]
 #[derive(Debug, Default, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentFilter {
-    #[serde_as(as = "Option<DisplayFromStr>")]
-    #[serde(rename = "articleId")]
-    pub article_public_id: Option<Uuid>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
-    #[serde(rename = "userId")]
-    pub user_public_id: Option<Uuid>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub article_id: Option<Uuid>,
+    pub user_id: Option<Uuid>,
     pub user_name: Option<String>,
 }
 
@@ -26,7 +19,8 @@ pub struct CommentFilter {
 pub trait ICommentRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
     async fn create(
         &self,
-        user_public_id: Option<Uuid>,
+        user_id: Option<Uuid>,
+        user_name: String,
         payload: NewComment,
     ) -> anyhow::Result<Comment>;
     async fn find(

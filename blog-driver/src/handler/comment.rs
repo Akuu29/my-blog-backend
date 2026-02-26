@@ -38,29 +38,30 @@ where
     T: ICommentRepository,
     U: ITokenRepository,
 {
-    // Determine user identification based on token presence
-    let user_public_id = match token {
+    let (user_id, user_name) = match token {
         Some(AuthToken(token_string)) => {
             // Logged-in user: extract ID from access token
             let token_data = token_app_service
                 .verify_access_token(token_string)
                 .await
                 .map_err(|e| AppError::from(e))?;
-            Some(token_data.claims.sub())
+            (
+                Some(token_data.claims.sub()),
+                token_data.claims.name().to_string(),
+            )
         }
-        None => {
-            // Guest user: user_name must be provided
-            if payload.user_name.is_none() {
+        None => match payload.user_name.clone() {
+            Some(name) => (None::<Uuid>, name),
+            None => {
                 return Err(AppError::ValidationFailed(
                     "user_name is required for guest users".to_string(),
                 ));
             }
-            None
-        }
+        },
     };
 
     let comment = comment_app_service
-        .create(user_public_id, payload)
+        .create(user_id, user_name, payload)
         .await
         .map_err(|e| AppError::from(e))?;
 
@@ -112,7 +113,7 @@ where
     if has_next {
         comments.pop();
     }
-    let next_cursor = comments.last().map(|comment| comment.public_id).or(None);
+    let next_cursor = comments.last().map(|comment| comment.id).or(None);
     let paged_body = PagedBody::new(comments, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(

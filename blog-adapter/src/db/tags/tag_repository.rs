@@ -38,12 +38,12 @@ impl TagRepository {
 
         if let Some(user_id) = filter.user_id {
             push_condition(qb);
-            qb.push("u.public_id = ").push_bind(user_id);
+            qb.push("t.user_id = ").push_bind(user_id);
         }
 
         if let Some(tag_ids) = filter.tag_ids.clone() {
             push_condition(qb);
-            qb.push("t.public_id = ANY(").push_bind(tag_ids).push(")");
+            qb.push("t.id = ANY(").push_bind(tag_ids).push(")");
         }
 
         return has_condition;
@@ -59,13 +59,10 @@ impl ITagRepository for TagRepository {
                 name,
                 user_id
             )
-            VALUES (
-                $1,
-                (SELECT id FROM users WHERE public_id = $2)
-            )
+            VALUES ($1, $2)
             RETURNING
-                public_id,
-                $2 AS user_public_id,
+                id,
+                user_id,
                 name,
                 created_at,
                 updated_at
@@ -84,14 +81,13 @@ impl ITagRepository for TagRepository {
         let tag = sqlx::query_as::<_, Tag>(
             r#"
             SELECT
-                t.public_id,
-                u.public_id AS user_public_id,
+                t.id,
+                t.user_id,
                 t.name,
                 t.created_at,
                 t.updated_at
             FROM tags AS t
-            JOIN users AS u ON t.user_id = u.id
-            WHERE t.public_id = $1
+            WHERE t.id = $1
             ;
             "#,
         )
@@ -115,14 +111,12 @@ impl ITagRepository for TagRepository {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                t.public_id,
-                u.public_id AS user_public_id,
+                t.id,
+                t.user_id,
                 t.name,
                 t.created_at,
                 t.updated_at
             FROM tags AS t
-            JOIN users AS u
-            ON t.user_id = u.id
             "#,
         );
 
@@ -135,22 +129,28 @@ impl ITagRepository for TagRepository {
         because each is validated to prevent conflicts.
         */
         if let Some(cursor) = pagination.cursor {
-            let cid_option =
-                sqlx::query_scalar::<_, i32>("SELECT id FROM tags WHERE public_id = $1")
-                    .bind(cursor)
-                    .fetch_optional(&self.pool)
-                    .await?;
+            let cursor_ts_option = sqlx::query_scalar::<
+                _,
+                sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>,
+            >("SELECT created_at FROM tags WHERE id = $1")
+            .bind(cursor)
+            .fetch_optional(&self.pool)
+            .await?;
 
-            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
+            let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
                 qb.push(" AND ");
             } else {
                 qb.push(" WHERE ");
             }
-            qb.push("t.id < ").push_bind(cid);
+            qb.push("(t.created_at, t.id) < (")
+                .push_bind(cursor_ts)
+                .push(", ")
+                .push_bind(cursor)
+                .push(")");
         }
 
-        qb.push(" ORDER BY t.id DESC");
+        qb.push(" ORDER BY t.created_at DESC, t.id DESC");
 
         if let Some(offset) = pagination.offset {
             qb.push(" OFFSET ").push_bind(offset);
@@ -166,7 +166,6 @@ impl ITagRepository for TagRepository {
             SELECT
                 COUNT(*)
             FROM tags AS t
-            LEFT JOIN users AS u ON t.user_id = u.id
             "#,
         );
         // build conditions
@@ -184,7 +183,7 @@ impl ITagRepository for TagRepository {
         sqlx::query(
             r#"
             DELETE FROM tags
-            WHERE public_id = $1
+            WHERE id = $1
             ;
             "#,
         )
@@ -219,9 +218,22 @@ mod test {
         ));
         let repository = TagRepository::new(pool.clone());
 
-        // Get test user public_id (UUID)
-        let user_public_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
-        let user_uuid = uuid::Uuid::parse_str(&user_public_id).expect("invalid TEST_USER_ID UUID");
+        // Get test user id (UUID)
+        let user_id = std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID");
+        let user_uuid = uuid::Uuid::parse_str(&user_id).expect("invalid TEST_USER_ID UUID");
+
+        // Ensure the test user exists (required by tags.user_id foreign key)
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, name)
+            VALUES ($1, 'test-user')
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(user_uuid)
+        .execute(&pool)
+        .await
+        .expect("failed to ensure test user exists");
 
         (pool, repository, user_uuid)
     }
@@ -285,10 +297,10 @@ mod test {
         };
 
         let tag = repository.create(user_uuid, payload).await.unwrap();
-        guard.track(tag.public_id);
+        guard.track(tag.id);
 
         assert_eq!(tag.name, unique_name);
-        assert_eq!(tag.user_public_id, user_uuid);
+        assert_eq!(tag.user_id, user_uuid);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -303,7 +315,7 @@ mod test {
             &format!("tag1-{}", Uuid::new_v4().to_string()[0..8].to_string()),
         )
         .await;
-        guard.track(tag1.public_id);
+        guard.track(tag1.id);
 
         let tag2 = create_test_tag(
             &repository,
@@ -311,7 +323,7 @@ mod test {
             &format!("tag2-{}", Uuid::new_v4().to_string()[0..8].to_string()),
         )
         .await;
-        guard.track(tag2.public_id);
+        guard.track(tag2.id);
 
         let filter = TagFilter {
             user_id: Some(user_uuid),
@@ -325,8 +337,8 @@ mod test {
 
         let (tags, _) = repository.all(filter, pagination).await.unwrap();
 
-        assert!(tags.iter().any(|t| t.public_id == tag1.public_id));
-        assert!(tags.iter().any(|t| t.public_id == tag2.public_id));
+        assert!(tags.iter().any(|t| t.id == tag1.id));
+        assert!(tags.iter().any(|t| t.id == tag2.id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -341,7 +353,7 @@ mod test {
             &format!("cur1-{}", Uuid::new_v4().to_string()[0..8].to_string()),
         )
         .await;
-        guard.track(tag1.public_id);
+        guard.track(tag1.id);
 
         let tag2 = create_test_tag(
             &repository,
@@ -349,7 +361,7 @@ mod test {
             &format!("cur2-{}", Uuid::new_v4().to_string()[0..8].to_string()),
         )
         .await;
-        guard.track(tag2.public_id);
+        guard.track(tag2.id);
 
         let tag3 = create_test_tag(
             &repository,
@@ -357,7 +369,7 @@ mod test {
             &format!("cur3-{}", Uuid::new_v4().to_string()[0..8].to_string()),
         )
         .await;
-        guard.track(tag3.public_id);
+        guard.track(tag3.id);
 
         let filter = TagFilter {
             user_id: Some(user_uuid),
@@ -374,7 +386,7 @@ mod test {
         assert!(first_page.len() >= 2);
 
         // Get second page using cursor
-        let cursor_id = first_page[1].public_id;
+        let cursor_id = first_page[1].id;
         let filter_with_cursor = TagFilter {
             user_id: Some(user_uuid),
             tag_ids: None,
@@ -390,7 +402,7 @@ mod test {
             .unwrap();
 
         // Verify cursor works - second page should not contain the cursor tag
-        assert!(!second_page.iter().any(|t| t.public_id == cursor_id));
+        assert!(!second_page.iter().any(|t| t.id == cursor_id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -405,12 +417,12 @@ mod test {
             &format!("find-{}", Uuid::new_v4().to_string()[0..8].to_string()),
         )
         .await;
-        guard.track(created_tag.public_id);
+        guard.track(created_tag.id);
 
-        let found_tag = repository.find(created_tag.public_id).await.unwrap();
+        let found_tag = repository.find(created_tag.id).await.unwrap();
 
-        assert_eq!(found_tag.public_id, created_tag.public_id);
-        assert_eq!(found_tag.user_public_id, user_uuid);
+        assert_eq!(found_tag.id, created_tag.id);
+        assert_eq!(found_tag.user_id, user_uuid);
         assert_eq!(found_tag.name, created_tag.name);
     }
 
@@ -437,12 +449,12 @@ mod test {
             &format!("del-{}", Uuid::new_v4().to_string()[0..8].to_string()),
         )
         .await;
-        guard.track(tag.public_id);
+        guard.track(tag.id);
 
-        repository.delete(tag.public_id).await.unwrap();
+        repository.delete(tag.id).await.unwrap();
 
         // Verify deletion by trying to find it
-        let result = repository.find(tag.public_id).await;
+        let result = repository.find(tag.id).await;
         assert!(result.is_err());
     }
 }

@@ -10,10 +10,6 @@ impl CookieBuilder {
         Self { config }
     }
 
-    pub fn from_env() -> Self {
-        Self::new(CookieConfig::from_env())
-    }
-
     pub fn build_custom_cookie(&self, name: &str, value: &str) -> cookie::Cookie<'static> {
         Cookie::build((name.to_owned(), value.to_owned()))
             .http_only(self.config.http_only)

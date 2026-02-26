@@ -11,7 +11,6 @@ pub struct Pagination {
     #[serde_as(as = "Option<DisplayFromStr>")]
     #[validate(range(min = 0, message = "offset must be greater than or equal to 0"))]
     pub offset: Option<i32>,
-    #[serde_as(as = "Option<DisplayFromStr>")]
     pub cursor: Option<Uuid>,
     #[serde_as(as = "DisplayFromStr")]
     #[serde(default = "default_per_page")]

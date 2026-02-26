@@ -75,7 +75,7 @@ where
         tags.pop();
     }
 
-    let next_cursor = tags.last().map(|tag| tag.public_id).or(None);
+    let next_cursor = tags.last().map(|tag| tag.id).or(None);
     let paged_body = PagedBody::new(tags, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(
