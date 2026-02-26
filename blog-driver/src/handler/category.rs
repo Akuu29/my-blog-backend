@@ -79,7 +79,7 @@ where
     }
     let next_cursor = categories
         .last()
-        .map(|category| category.public_id)
+        .map(|category| category.id)
         .or(None);
     let paged_body = PagedBody::new(categories, next_cursor, has_next, total.value());
 

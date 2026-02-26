@@ -22,8 +22,7 @@ pub enum UserRole {
 #[derive(Debug, FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
-    #[serde(rename = "id")]
-    pub public_id: Uuid,
+    pub id: Uuid,
     pub name: String,
     #[serde(skip)]
     pub role: UserRole,

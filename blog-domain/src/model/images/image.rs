@@ -18,36 +18,37 @@ pub struct ImageData {
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageDataProps {
-    #[serde(rename = "id")]
-    pub public_id: Uuid,
+    pub id: Uuid,
     pub name: String,
     pub mime_type: String,
     pub url: Option<String>,
     pub storage_type: String,
-    #[serde(rename = "articleId")]
-    pub article_public_id: Uuid,
+    pub article_id: Uuid,
     pub created_at: DateTime<Local>,
     pub updated_at: DateTime<Local>,
 }
 
 #[derive(Debug, FromRow)]
 pub struct ImageWithOwner {
-    pub public_id: Uuid,
+    pub id: Uuid,
     pub name: String,
-    pub article_public_id: Uuid,
+    pub article_id: Uuid,
     pub article_owner_id: Uuid,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "storage_type", rename_all = "lowercase")]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum StorageType {
     Database,
+    Custom,
+    S3,
 }
 
 impl fmt::Display for StorageType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StorageType::Database => write!(f, "database"),
+            StorageType::Custom => write!(f, "custom"),
+            StorageType::S3 => write!(f, "s3"),
         }
     }
 }
@@ -70,8 +71,7 @@ pub struct NewImage {
     pub data: Vec<u8>,
     pub url: Option<String>,
     pub storage_type: StorageType,
-    #[serde(rename = "articleId")]
-    pub article_public_id: Uuid,
+    pub article_id: Uuid,
 }
 
 fn validate_mime_type(mime_type: &str) -> Result<(), ValidationError> {

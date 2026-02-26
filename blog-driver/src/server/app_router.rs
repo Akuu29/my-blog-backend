@@ -22,6 +22,7 @@ use blog_app::{
         tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
     },
 };
+use blog_domain::config::EmailConfig;
 use blog_domain::model::{
     articles::i_article_repository::IArticleRepository,
     categories::i_category_repository::ICategoryRepository,
@@ -50,6 +51,8 @@ impl AppRouter {
     >(
         cors_layer: CorsLayer,
         app_state: AppState,
+        max_request_body_size: usize,
+        email_config: EmailConfig,
         token_app_service: TokenAppService<TokenRepo>,
         user_app_service: UserAppService<UserRepo>,
         article_app_service: ArticleAppService<ArticleRepo, TagRep>,
@@ -88,11 +91,6 @@ impl AppRouter {
         );
         let image_router = Self::create_image_router::<TokenRepo, ImageRepo>(image_app_service);
 
-        let max_request_body_size = std::env::var("MAX_REQUEST_BODY_SIZE")
-            .expect("undefined MAX_REQUEST_BODY_SIZE")
-            .parse::<usize>()
-            .unwrap();
-
         let router = Router::new()
             .route("/hello-world", get(|| async { "Hello, world!" }))
             .nest("/token", token_router)
@@ -106,6 +104,7 @@ impl AppRouter {
             .layer(Extension(Arc::new(user_app_service)))
             .layer(Extension(Arc::new(tag_app_service)))
             .layer(Extension(Arc::new(cookie_service)))
+            .layer(Extension(Arc::new(email_config)))
             .layer(DefaultBodyLimit::max(max_request_body_size))
             .layer(cors_layer)
             .layer(middleware::from_fn(logging_middleware))

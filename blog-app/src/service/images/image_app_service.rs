@@ -1,4 +1,5 @@
 use super::ImageUsecaseError;
+use crate::config::ImageConfig;
 use blog_domain::{
     model::images::{
         i_image_repository::{IImageRepository, ImageFilter},
@@ -11,6 +12,7 @@ use uuid::Uuid;
 pub struct ImageAppService<T: IImageRepository> {
     repository: T,
     image_service: ImageService<T>,
+    config: ImageConfig,
 }
 
 impl<T: IImageRepository> ImageAppService<T>
@@ -34,11 +36,12 @@ where
     /// Trade-off: Less flexible than dependency injection, but simpler for current needs.
     /// If domain services become complex or need multiple implementations, consider
     /// adding a `with_service()` constructor for testing/customization.
-    pub fn new(repository: T) -> Self {
+    pub fn new(repository: T, config: ImageConfig) -> Self {
         let image_service = ImageService::new(repository.clone());
         Self {
             repository,
             image_service,
+            config,
         }
     }
 
@@ -58,9 +61,7 @@ where
             "database" => {
                 format!(
                     "{}://{}/images/{}",
-                    std::env::var("GATEWAY_PROTOCOL").expect("undefined GATEWAY_PROTOCOL"),
-                    std::env::var("GATEWAY_DOMAIN").expect("undefined GATEWAY_DOMAIN"),
-                    image.public_id
+                    self.config.gateway_protocol, self.config.gateway_domain, image.id
                 )
             }
             _ => image.url.unwrap(),
@@ -89,9 +90,7 @@ where
                 "database" => {
                     format!(
                         "{}://{}/images/{}",
-                        std::env::var("GATEWAY_PROTOCOL").expect("undefined GATEWAY_PROTOCOL"),
-                        std::env::var("GATEWAY_DOMAIN").expect("undefined GATEWAY_DOMAIN"),
-                        image.public_id
+                        self.config.gateway_protocol, self.config.gateway_domain, image.id
                     )
                 }
                 _ => image.url.as_ref().unwrap().to_string(),

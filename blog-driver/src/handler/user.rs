@@ -17,17 +17,20 @@ use blog_app::service::{
     tokens::token_app_service::TokenAppService,
     users::{UserUsecaseError, user_app_service::UserAppService},
 };
-use blog_domain::model::{
-    tokens::{
-        i_token_repository::ITokenRepository,
-        token::ApiCredentials,
-        token_string::{AccessTokenString, IdTokenString},
-    },
-    users::{
-        email_cipher::EmailCipher,
-        email_hash::EmailHash,
-        i_user_repository::{IUserRepository, UserFilter},
-        user::{NewUser, UpdateUser},
+use blog_domain::{
+    config::EmailConfig,
+    model::{
+        tokens::{
+            i_token_repository::ITokenRepository,
+            token::ApiCredentials,
+            token_string::{AccessTokenString, IdTokenString},
+        },
+        users::{
+            email_cipher::EmailCipher,
+            email_hash::EmailHash,
+            i_user_repository::{IUserRepository, UserFilter},
+            user::{NewUser, UpdateUser},
+        },
     },
 };
 use sqlx::types::Uuid;
@@ -35,12 +38,20 @@ use std::{sync::Arc, time};
 
 #[tracing::instrument(
     name = "sign_up",
-    skip(token_app_service, user_app_service, cookie_service, token, jar)
+    skip(
+        token_app_service,
+        user_app_service,
+        cookie_service,
+        email_config,
+        token,
+        jar
+    )
 )]
 pub async fn sign_up<T, U>(
     Extension(token_app_service): Extension<Arc<TokenAppService<T>>>,
     Extension(user_app_service): Extension<Arc<UserAppService<U>>>,
     Extension(cookie_service): Extension<Arc<CookieService>>,
+    Extension(email_config): Extension<Arc<EmailConfig>>,
     AuthToken(token): AuthToken<IdTokenString>,
     jar: PrivateCookieJar,
 ) -> Result<impl IntoResponse, AppError>
@@ -69,9 +80,10 @@ where
         Err(e) => match &e {
             UserUsecaseError::RepositoryError(_) => {
                 let email = id_token_claims.email();
-                let email_cipher = EmailCipher::from_plaintext(&email)
-                    .map_err(|e| AppError::Unexpected(e.to_string()))?;
-                let email_hash = EmailHash::from_plaintext(&email);
+                let email_cipher =
+                    EmailCipher::from_plaintext(&email, &email_config.encryption_key)
+                        .map_err(|e| AppError::Unexpected(e.to_string()))?;
+                let email_hash = EmailHash::from_plaintext(&email, &email_config.pepper);
 
                 let new_user = NewUser::new(
                     &provider_name,
@@ -201,7 +213,7 @@ where
         users.pop();
     }
 
-    let next_cursor = users.last().map(|user| user.public_id).or(None);
+    let next_cursor = users.last().map(|user| user.id).or(None);
     let paged_body = PagedBody::new(users, next_cursor, has_next, total.value());
 
     Ok(ApiResponse::new(

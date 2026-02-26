@@ -36,14 +36,14 @@ impl CommentRepository {
             }
         };
 
-        if let Some(article_public_id) = filter.article_public_id {
+        if let Some(article_id) = filter.article_id {
             push_condition(qb);
-            qb.push("a.public_id = ").push_bind(article_public_id);
+            qb.push("c.article_id = ").push_bind(article_id);
         }
 
-        if let Some(user_public_id) = filter.user_public_id {
+        if let Some(user_id) = filter.user_id {
             push_condition(qb);
-            qb.push("u.public_id = ").push_bind(user_public_id);
+            qb.push("c.user_id = ").push_bind(user_id);
         }
 
         if let Some(user_name) = filter.user_name.clone() {
@@ -63,73 +63,23 @@ impl CommentRepository {
 impl ICommentRepository for CommentRepository {
     async fn create(
         &self,
-        user_public_id: Option<Uuid>,
+        user_id: Option<Uuid>,
+        user_name: String,
         payload: NewComment,
     ) -> anyhow::Result<Comment> {
-        // Handle user identification (logged-in user vs guest user)
-        let comment = if let Some(user_public_id) = user_public_id {
-            // Logged-in user: store user_id, get user_name via JOIN
-            sqlx::query_as::<_, Comment>(
-                r#"
-                WITH target_article AS (
-                    SELECT id FROM articles WHERE public_id = $1
-                ),
-                target_user AS (
-                    SELECT id FROM users WHERE public_id = $2
-                )
-                INSERT INTO comments (article_id, body, user_id)
-                SELECT target_article.id, $3, target_user.id
-                FROM target_article
-                CROSS JOIN target_user
-                RETURNING
-                    public_id,
-                    $2 AS user_public_id,
-                    (SELECT name FROM users WHERE public_id = $2) AS user_name,
-                    $1 AS article_public_id,
-                    body,
-                    created_at,
-                    updated_at
-                ;
-                "#,
-            )
-            .bind(payload.article_public_id)
-            .bind(user_public_id)
-            .bind(payload.body)
-            .fetch_one(&self.pool)
-            .await?
-        } else if let Some(user_name) = payload.user_name {
-            // Guest user: store user_name directly
-            sqlx::query_as::<_, Comment>(
-                r#"
-                WITH target_article AS (
-                    SELECT id FROM articles WHERE public_id = $1
-                )
-                INSERT INTO comments (article_id, body, user_name)
-                SELECT target_article.id, $2, $3
-                FROM target_article
-                RETURNING
-                    public_id,
-                    NULL AS user_public_id,
-                    user_name,
-                    $1 AS article_public_id,
-                    body,
-                    created_at,
-                    updated_at
-                ;
-                "#,
-            )
-            .bind(payload.article_public_id)
-            .bind(payload.body)
-            .bind(user_name)
-            .fetch_one(&self.pool)
-            .await?
-        } else {
-            // This should never happen due to validation, but handle it gracefully
-            return Err(RepositoryError::Unexpected(
-                "Either user_public_id or user_name must be provided".to_string(),
-            )
-            .into());
-        };
+        let comment = sqlx::query_as::<_, Comment>(
+            r#"
+            INSERT INTO comments (article_id, body, user_id, user_name)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, user_id, user_name, article_id, body, created_at, updated_at
+            "#,
+        )
+        .bind(payload.article_id)
+        .bind(payload.body)
+        .bind(user_id)
+        .bind(user_name)
+        .fetch_one(&self.pool)
+        .await?;
 
         Ok(comment)
     }
@@ -142,29 +92,28 @@ impl ICommentRepository for CommentRepository {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                c.public_id,
-                u.public_id AS user_public_id,
+                c.id,
+                c.user_id,
                 COALESCE(u.name, c.user_name) AS user_name,
-                a.public_id AS article_public_id,
+                c.article_id,
                 c.body,
                 c.created_at,
                 c.updated_at
             FROM comments AS c
             LEFT JOIN users AS u ON c.user_id = u.id
-            LEFT JOIN articles AS a ON c.article_id = a.id
-            WHERE c.public_id =
+            WHERE c.id =
             "#,
         );
 
         qb.push_bind(comment_id);
 
         // Apply additional filters
-        if let Some(article_public_id) = comment_filter.article_public_id {
-            qb.push(" AND a.public_id = ").push_bind(article_public_id);
+        if let Some(article_id) = comment_filter.article_id {
+            qb.push(" AND c.article_id = ").push_bind(article_id);
         }
 
-        if let Some(user_public_id) = comment_filter.user_public_id {
-            qb.push(" AND u.public_id = ").push_bind(user_public_id);
+        if let Some(user_id) = comment_filter.user_id {
+            qb.push(" AND c.user_id = ").push_bind(user_id);
         }
 
         if let Some(user_name) = comment_filter.user_name {
@@ -196,16 +145,15 @@ impl ICommentRepository for CommentRepository {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
-                c.public_id,
-                u.public_id AS user_public_id,
+                c.id,
+                c.user_id,
                 COALESCE(u.name, c.user_name) AS user_name,
-                a.public_id AS article_public_id,
+                c.article_id,
                 c.body,
                 c.created_at,
                 c.updated_at
             FROM comments AS c
             LEFT JOIN users AS u ON c.user_id = u.id
-            LEFT JOIN articles AS a ON c.article_id = a.id
             "#,
         );
 
@@ -214,22 +162,22 @@ impl ICommentRepository for CommentRepository {
 
         // Handle cursor-based pagination
         if let Some(cursor) = pagination.cursor {
-            let cid_option =
-                sqlx::query_scalar::<_, i32>("SELECT id FROM comments WHERE public_id = $1")
+            let cursor_ts_option =
+                sqlx::query_scalar::<_, sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>>("SELECT created_at FROM comments WHERE id = $1")
                     .bind(cursor)
                     .fetch_optional(&self.pool)
                     .await?;
 
-            let cid = cid_option.ok_or(RepositoryError::NotFound)?;
+            let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
                 qb.push(" AND ");
             } else {
                 qb.push(" WHERE ");
             }
-            qb.push("c.id < ").push_bind(cid);
+            qb.push("(c.created_at, c.id) < (").push_bind(cursor_ts).push(", ").push_bind(cursor).push(")");
         }
 
-        qb.push(" ORDER BY c.id DESC");
+        qb.push(" ORDER BY c.created_at DESC, c.id DESC");
 
         if let Some(offset) = pagination.offset {
             qb.push(" OFFSET ").push_bind(offset);
@@ -245,7 +193,6 @@ impl ICommentRepository for CommentRepository {
             SELECT COUNT(*)
             FROM comments AS c
             LEFT JOIN users AS u ON c.user_id = u.id
-            LEFT JOIN articles AS a ON c.article_id = a.id
             "#,
         );
 
@@ -265,15 +212,15 @@ impl ICommentRepository for CommentRepository {
             r#"
             UPDATE comments
             SET body = $1, updated_at = now()
-            WHERE public_id = $2
+            WHERE id = $2
             RETURNING
-                public_id,
-                (SELECT public_id FROM users WHERE id = comments.user_id) AS user_public_id,
+                id,
+                user_id,
                 COALESCE(
                     (SELECT name FROM users WHERE id = comments.user_id),
                     user_name
                 ) AS user_name,
-                (SELECT public_id FROM articles WHERE id = comments.article_id) AS article_public_id,
+                article_id,
                 body,
                 created_at,
                 updated_at
@@ -292,7 +239,7 @@ impl ICommentRepository for CommentRepository {
         sqlx::query(
             r#"
             DELETE FROM comments
-            WHERE public_id = $1
+            WHERE id = $1
             ;
             "#,
         )
@@ -328,63 +275,79 @@ mod test {
         ));
         let repository = CommentRepository::new(pool.clone());
 
-        // Get test user public_id (UUID)
-        let user_public_id =
+        // Get test user id (UUID)
+        let user_id =
             Uuid::parse_str(&std::env::var("TEST_USER_ID").expect("undefined TEST_USER_ID"))
                 .expect("invalid TEST_USER_ID");
 
-        // Create a test article to use for comments
-        let article_public_id = sqlx::query_scalar::<_, Uuid>(
+        // Ensure the test user exists (required by articles/comments foreign keys)
+        sqlx::query(
             r#"
-            INSERT INTO articles (title, body, status, user_id)
-            VALUES ('Test Article for Comments', 'Test Body', 'draft', (SELECT id FROM users WHERE public_id = $1))
-            RETURNING public_id
+            INSERT INTO users (id, name)
+            VALUES ($1, 'test-user')
+            ON CONFLICT (id) DO NOTHING
             "#,
         )
-        .bind(user_public_id)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .expect("failed to ensure test user exists");
+
+        // Create a test article to use for comments
+        let article_id = sqlx::query_scalar::<_, Uuid>(
+            r#"
+            INSERT INTO articles (title, body, status, user_id)
+            VALUES ('Test Article for Comments', 'Test Body', 'draft', $1)
+            RETURNING id
+            "#,
+        )
+        .bind(user_id)
         .fetch_one(&pool)
         .await
         .expect("failed to create test article");
 
-        (pool, repository, user_public_id, article_public_id)
+        (pool, repository, user_id, article_id)
     }
 
     async fn create_test_comment(
         repository: &CommentRepository,
-        article_public_id: Uuid,
-        user_public_id: Uuid,
+        article_id: Uuid,
+        user_id: Uuid,
         body: &str,
     ) -> Comment {
         let payload = NewComment {
-            article_public_id,
+            article_id,
             body: body.to_string(),
             user_name: None,
         };
         repository
-            .create(Some(user_public_id), payload)
+            .create(Some(user_id), "test-user".to_string(), payload)
             .await
             .unwrap()
     }
 
     async fn create_test_comment_guest(
         repository: &CommentRepository,
-        article_public_id: Uuid,
+        article_id: Uuid,
         user_name: &str,
         body: &str,
     ) -> Comment {
         let payload = NewComment {
-            article_public_id,
+            article_id,
             body: body.to_string(),
             user_name: Some(user_name.to_string()),
         };
-        repository.create(None, payload).await.unwrap()
+        repository
+            .create(None, user_name.to_string(), payload)
+            .await
+            .unwrap()
     }
 
     struct TestCommentGuard {
         pool: PgPool,
         repository: CommentRepository,
         comment_ids: Vec<Uuid>,
-        article_public_id: Option<Uuid>,
+        article_id: Option<Uuid>,
         runtime_handle: tokio::runtime::Handle,
     }
 
@@ -392,13 +355,13 @@ mod test {
         fn new(
             pool: &PgPool,
             repository: &CommentRepository,
-            article_public_id: Option<Uuid>,
+            article_id: Option<Uuid>,
         ) -> Self {
             Self {
                 pool: pool.clone(),
                 repository: repository.clone(),
                 comment_ids: Vec::new(),
-                article_public_id,
+                article_id,
                 runtime_handle: tokio::runtime::Handle::current(),
             }
         }
@@ -414,7 +377,7 @@ mod test {
             let pool = self.pool.clone();
             let repository = self.repository.clone();
             let comment_ids = self.comment_ids.clone();
-            let article_public_id = self.article_public_id;
+            let article_id = self.article_id;
             let handle = self.runtime_handle.clone();
 
             // Use block_in_place to allow blocking in async context
@@ -427,9 +390,9 @@ mod test {
                         }
 
                         // Cleanup test article if created
-                        if let Some(article_public_id) = article_public_id {
-                            let _ = sqlx::query("DELETE FROM articles WHERE public_id = $1")
-                                .bind(article_public_id)
+                        if let Some(article_id) = article_id {
+                            let _ = sqlx::query("DELETE FROM articles WHERE id = $1")
+                                .bind(article_id)
                                 .execute(&pool)
                                 .await;
                         }
@@ -442,103 +405,107 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn test_create_comment_logged_in_user() {
-        let (pool, repository, user_public_id, article_public_id) = setup().await;
-        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_public_id));
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
         let body = "test comment body";
+        let user_name = "test-user";
         let payload = NewComment {
-            article_public_id,
+            article_id,
             body: body.to_string(),
             user_name: None,
         };
 
         let comment = repository
-            .create(Some(user_public_id), payload)
+            .create(Some(user_id), user_name.to_string(), payload)
             .await
             .unwrap();
-        guard.track(comment.public_id);
+        guard.track(comment.id);
 
-        assert_eq!(comment.article_public_id, article_public_id);
+        assert_eq!(comment.article_id, article_id);
         assert_eq!(comment.body, body);
-        assert_eq!(comment.user_public_id, Some(user_public_id));
-        assert!(comment.user_name.is_some()); // Should be fetched via JOIN
+        assert_eq!(comment.user_id, Some(user_id));
+        assert_eq!(comment.user_name, user_name);
     }
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn test_create_comment_guest_user() {
-        let (pool, repository, _user_public_id, article_public_id) = setup().await;
-        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_public_id));
+        let (pool, repository, _user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
         let body = "guest comment body";
         let guest_name = "Anonymous Guest";
         let payload = NewComment {
-            article_public_id,
+            article_id,
             body: body.to_string(),
             user_name: Some(guest_name.to_string()),
         };
 
-        let comment = repository.create(None, payload).await.unwrap();
-        guard.track(comment.public_id);
+        let comment = repository
+            .create(None, guest_name.to_string(), payload)
+            .await
+            .unwrap();
+        guard.track(comment.id);
 
-        assert_eq!(comment.article_public_id, article_public_id);
+        assert_eq!(comment.article_id, article_id);
         assert_eq!(comment.body, body);
-        assert_eq!(comment.user_public_id, None);
-        assert_eq!(comment.user_name, Some(guest_name.to_string()));
+        assert_eq!(comment.user_id, None);
+        assert_eq!(comment.user_name, guest_name);
     }
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn test_find_comment() {
-        let (pool, repository, user_public_id, article_public_id) = setup().await;
-        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_public_id));
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
         let comment = create_test_comment(
             &repository,
-            article_public_id,
-            user_public_id,
+            article_id,
+            user_id,
             "test find comment",
         )
         .await;
-        guard.track(comment.public_id);
+        guard.track(comment.id);
 
         let found_comment = repository
-            .find(comment.public_id, CommentFilter::default())
+            .find(comment.id, CommentFilter::default())
             .await
             .unwrap();
 
-        assert_eq!(found_comment.public_id, comment.public_id);
-        assert_eq!(found_comment.article_public_id, article_public_id);
+        assert_eq!(found_comment.id, comment.id);
+        assert_eq!(found_comment.article_id, article_id);
         assert_eq!(found_comment.body, comment.body);
     }
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn test_all_comments_with_pagination() {
-        let (pool, repository, user_public_id, article_public_id) = setup().await;
-        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_public_id));
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
         let comment1 =
-            create_test_comment(&repository, article_public_id, user_public_id, "comment 1").await;
-        guard.track(comment1.public_id);
+            create_test_comment(&repository, article_id, user_id, "comment 1").await;
+        guard.track(comment1.id);
 
         let comment2 =
-            create_test_comment(&repository, article_public_id, user_public_id, "comment 2").await;
-        guard.track(comment2.public_id);
+            create_test_comment(&repository, article_id, user_id, "comment 2").await;
+        guard.track(comment2.id);
 
         let comment3 = create_test_comment_guest(
             &repository,
-            article_public_id,
+            article_id,
             "Guest User",
             "guest comment",
         )
         .await;
-        guard.track(comment3.public_id);
+        guard.track(comment3.id);
 
         let (comments, total) = repository
             .all(
                 CommentFilter {
-                    article_public_id: Some(article_public_id),
+                    article_id: Some(article_id),
                     ..Default::default()
                 },
                 Pagination {
@@ -551,53 +518,53 @@ mod test {
 
         assert!(comments.len() >= 3);
         assert!(total.value() >= 3);
-        assert!(comments.iter().any(|c| c.public_id == comment1.public_id));
-        assert!(comments.iter().any(|c| c.public_id == comment2.public_id));
-        assert!(comments.iter().any(|c| c.public_id == comment3.public_id));
+        assert!(comments.iter().any(|c| c.id == comment1.id));
+        assert!(comments.iter().any(|c| c.id == comment2.id));
+        assert!(comments.iter().any(|c| c.id == comment3.id));
     }
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn test_update_comment() {
-        let (pool, repository, user_public_id, article_public_id) = setup().await;
-        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_public_id));
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
         let comment = create_test_comment(
             &repository,
-            article_public_id,
-            user_public_id,
+            article_id,
+            user_id,
             "original body",
         )
         .await;
-        guard.track(comment.public_id);
+        guard.track(comment.id);
 
         let update_payload = UpdateComment {
             body: Some("updated body".to_string()),
         };
 
         let updated_comment = repository
-            .update(comment.public_id, update_payload)
+            .update(comment.id, update_payload)
             .await
             .unwrap();
 
-        assert_eq!(updated_comment.public_id, comment.public_id);
+        assert_eq!(updated_comment.id, comment.id);
         assert_eq!(updated_comment.body, "updated body");
     }
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn test_delete_comment() {
-        let (pool, repository, user_public_id, article_public_id) = setup().await;
-        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_public_id));
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
         let comment =
-            create_test_comment(&repository, article_public_id, user_public_id, "to delete").await;
-        guard.track(comment.public_id);
+            create_test_comment(&repository, article_id, user_id, "to delete").await;
+        guard.track(comment.id);
 
-        repository.delete(comment.public_id).await.unwrap();
+        repository.delete(comment.id).await.unwrap();
 
         let result = repository
-            .find(comment.public_id, CommentFilter::default())
+            .find(comment.id, CommentFilter::default())
             .await;
         assert!(result.is_err());
     }
@@ -605,30 +572,30 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
     async fn test_find_comment_with_filter() {
-        let (pool, repository, user_public_id, article_public_id) = setup().await;
-        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_public_id));
+        let (pool, repository, user_id, article_id) = setup().await;
+        let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
         let comment = create_test_comment(
             &repository,
-            article_public_id,
-            user_public_id,
+            article_id,
+            user_id,
             "comment with filter",
         )
         .await;
-        guard.track(comment.public_id);
+        guard.track(comment.id);
 
-        // Test with user_public_id filter
+        // Test with user_id filter
         let found_comment = repository
             .find(
-                comment.public_id,
+                comment.id,
                 CommentFilter {
-                    user_public_id: Some(user_public_id),
+                    user_id: Some(user_id),
                     ..Default::default()
                 },
             )
             .await
             .unwrap();
 
-        assert_eq!(found_comment.user_public_id, Some(user_public_id));
+        assert_eq!(found_comment.user_id, Some(user_id));
     }
 }

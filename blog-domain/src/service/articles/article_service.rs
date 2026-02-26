@@ -21,7 +21,7 @@ where
     pub async fn verify_ownership(
         &self,
         article_id: Uuid,
-        user_public_id: Uuid,
+        user_id: Uuid,
     ) -> Result<(), ArticleServiceError> {
         let article = self
             .repository
@@ -32,7 +32,7 @@ where
                 ArticleServiceError::NotFound
             })?;
 
-        if article.user_public_id != user_public_id {
+        if article.user_id != user_id {
             return Err(ArticleServiceError::Unauthorized);
         }
 

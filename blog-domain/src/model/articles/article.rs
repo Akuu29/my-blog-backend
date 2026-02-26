@@ -46,15 +46,12 @@ impl fmt::Display for ArticleStatus {
 #[derive(Debug, Clone, Serialize, FromRow, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Article {
-    #[serde(rename = "id")]
-    pub public_id: Uuid,
-    #[serde(rename = "userId")]
-    pub user_public_id: Uuid,
+    pub id: Uuid,
+    pub user_id: Uuid,
     pub title: Option<String>,
     pub body: Option<String>,
     pub status: ArticleStatus,
-    #[serde(rename = "categoryId")]
-    pub category_public_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
     pub created_at: DateTime<Local>,
     pub updated_at: DateTime<Local>,
 }
@@ -67,8 +64,7 @@ pub struct NewArticle {
     #[validate(length(min = 1, message = "body length mut be 1 or more"))]
     pub body: Option<String>,
     pub status: ArticleStatus,
-    #[serde(rename = "categoryId")]
-    pub category_public_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -79,6 +75,5 @@ pub struct UpdateArticle {
     #[validate(length(min = 1, message = "body length mut be 1 or more"))]
     pub body: Option<String>,
     pub status: Option<ArticleStatus>,
-    #[serde(rename = "categoryId")]
-    pub category_public_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
 }

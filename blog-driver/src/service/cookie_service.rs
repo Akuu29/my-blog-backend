@@ -1,13 +1,13 @@
-use crate::utils::cookie_builder::CookieBuilder;
+use crate::{config::CookieConfig, utils::cookie_builder::CookieBuilder};
 use axum_extra::extract::cookie::PrivateCookieJar;
 pub struct CookieService {
     cookie_builder: CookieBuilder,
 }
 
 impl CookieService {
-    pub fn new() -> Self {
+    pub fn new(cookie_config: CookieConfig) -> Self {
         Self {
-            cookie_builder: CookieBuilder::from_env(),
+            cookie_builder: CookieBuilder::new(cookie_config),
         }
     }
 

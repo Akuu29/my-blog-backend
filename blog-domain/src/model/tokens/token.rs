@@ -49,11 +49,12 @@ pub struct AccessTokenClaims {
     nbf: usize,
     /// unique identifier for the token
     jti: String,
+    name: String,
     pub role: UserRole,
 }
 
 impl AccessTokenClaims {
-    pub fn new(user: &User) -> Self {
+    pub fn new(user: &User, audience: &str, issuer: &str) -> Self {
         let now = Utc::now();
         let expiration = now + chrono::Duration::hours(1);
         let not_before = now;
@@ -61,17 +62,22 @@ impl AccessTokenClaims {
         AccessTokenClaims {
             exp: expiration.timestamp() as usize,
             iat: now.timestamp() as usize,
-            aud: std::env::var("AUDIENCE").expect("undefined AUDIENCE"),
-            iss: std::env::var("ISSUER").expect("undefined ISSUER"),
-            sub: user.public_id,
+            aud: audience.to_string(),
+            iss: issuer.to_string(),
+            sub: user.id,
             nbf: not_before.timestamp() as usize,
             jti: uuid::Uuid::new_v4().to_string(),
+            name: user.name.clone(),
             role: user.role.clone(),
         }
     }
 
     pub fn sub(&self) -> Uuid {
         self.sub
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -85,16 +91,16 @@ pub struct RefreshTokenClaims {
 }
 
 impl RefreshTokenClaims {
-    pub fn new(user: &User) -> Self {
+    pub fn new(user: &User, audience: &str, issuer: &str) -> Self {
         let now = Utc::now();
         let expiration = now + chrono::Duration::days(30);
 
         RefreshTokenClaims {
             exp: expiration.timestamp() as usize,
             iat: now.timestamp() as usize,
-            aud: std::env::var("AUDIENCE").expect("undefined AUDIENCE"),
-            iss: std::env::var("ISSUER").expect("undefined ISSUER"),
-            sub: user.public_id,
+            aud: audience.to_string(),
+            iss: issuer.to_string(),
+            sub: user.id,
         }
     }
 
