@@ -5,7 +5,6 @@ use aes_gcm::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::{FromRow, types::Json};
-use std::env;
 
 #[derive(Debug, Serialize)]
 pub struct CipherMetadata {
@@ -39,8 +38,8 @@ pub struct EmailCipher {
 }
 
 impl EmailCipher {
-    pub fn from_plaintext(plaintext: &str) -> anyhow::Result<Self> {
-        let (ciphertext, nonce) = Self::encrypt_email(plaintext)?;
+    pub fn from_plaintext(plaintext: &str, encryption_key: &str) -> anyhow::Result<Self> {
+        let (ciphertext, nonce) = Self::encrypt_email(plaintext, encryption_key)?;
 
         Ok(Self {
             ciphertext,
@@ -49,10 +48,7 @@ impl EmailCipher {
         })
     }
 
-    fn derive_key() -> anyhow::Result<Key<Aes256Gcm>> {
-        let encryption_key =
-            env::var("EMAIL_ENCRYPTION_KEY").expect("Undefined EMAIL_ENCRYPTION_KEY");
-
+    fn derive_key(encryption_key: &str) -> anyhow::Result<Key<Aes256Gcm>> {
         let mut hasher = Sha256::default();
         hasher.update(encryption_key.as_bytes());
         let key_bytes = hasher.finalize();
@@ -60,8 +56,8 @@ impl EmailCipher {
         Ok(*Key::<Aes256Gcm>::from_slice(&key_bytes))
     }
 
-    fn encrypt_email(email: &str) -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
-        let key = Self::derive_key()?;
+    fn encrypt_email(email: &str, encryption_key: &str) -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
+        let key = Self::derive_key(encryption_key)?;
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
         let cipher = Aes256Gcm::new(&key);
@@ -71,8 +67,13 @@ impl EmailCipher {
         Ok((ciphertext, nonce.to_vec()))
     }
 
-    pub fn decrypt_email(&self, ciphertext: &[u8], nonce: &[u8]) -> anyhow::Result<String> {
-        let key = Self::derive_key()?;
+    pub fn decrypt_email(
+        &self,
+        ciphertext: &[u8],
+        nonce: &[u8],
+        encryption_key: &str,
+    ) -> anyhow::Result<String> {
+        let key = Self::derive_key(encryption_key)?;
         let nonce = Nonce::from_slice(nonce);
 
         let cipher = Aes256Gcm::new(&key);

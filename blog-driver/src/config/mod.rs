@@ -2,6 +2,10 @@ pub mod cookie_config;
 
 pub use cookie_config::CookieConfig;
 
+use blog_adapter::config::FirebaseConfig;
+use blog_app::config::{ImageConfig, TokenConfig};
+use blog_domain::config::EmailConfig;
+
 /// Application-wide configuration loaded once at startup and passed as an argument to each process.
 pub struct AppConfig {
     /// Database connection URL. Passed to `PgPool` for establishing the connection.
@@ -20,6 +24,14 @@ pub struct AppConfig {
     /// Cookie attribute settings (SameSite, Secure, etc.). Passed to `CookieService`.
     /// Derived from the `ENVIRONMENT` variable.
     pub cookie_config: CookieConfig,
+    /// Email encryption and hashing keys. Passed to `user.rs` handler via Extension.
+    pub email_config: EmailConfig,
+    /// JWT signing keys and claims config. Passed to `TokenAppService`.
+    pub token_config: TokenConfig,
+    /// Gateway URL config for image URL construction. Passed to `ImageAppService`.
+    pub image_config: ImageConfig,
+    /// Firebase JWKS endpoint config. Passed to `TokenRepository`.
+    pub firebase_config: FirebaseConfig,
 }
 
 impl AppConfig {
@@ -48,6 +60,10 @@ impl AppConfig {
                 .parse::<usize>()
                 .unwrap(),
             cookie_config: CookieConfig::for_environment(&app_env),
+            email_config: EmailConfig::from_env(),
+            token_config: TokenConfig::from_env(),
+            image_config: ImageConfig::from_env(),
+            firebase_config: FirebaseConfig::from_env(),
         }
     }
 }

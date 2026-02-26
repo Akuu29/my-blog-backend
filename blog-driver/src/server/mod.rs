@@ -75,8 +75,12 @@ pub async fn run() {
     let user_app_service = UserAppService::new(UserRepository::new(pool.clone()));
     let category_app_service = CategoryAppService::new(CategoryRepository::new(pool.clone()));
     let tag_app_service = TagAppService::new(TagRepository::new(pool.clone()));
-    let token_app_service = TokenAppService::new(TokenRepository::new(http_client.clone()));
-    let image_app_service = ImageAppService::new(ImageRepository::new(pool.clone()));
+    let token_app_service = TokenAppService::new(
+        TokenRepository::new(http_client.clone(), config.firebase_config),
+        config.token_config,
+    );
+    let image_app_service =
+        ImageAppService::new(ImageRepository::new(pool.clone()), config.image_config);
 
     // query services
     let article_by_tag_query_service = ArticlesByTagQueryService::new(pool.clone());
@@ -111,6 +115,7 @@ pub async fn run() {
         cors_layer,
         app_state,
         config.max_request_body_size,
+        config.email_config,
         token_app_service,
         user_app_service,
         article_app_service,

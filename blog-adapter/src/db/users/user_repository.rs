@@ -131,9 +131,10 @@ impl IUserRepository for UserRepository {
         */
         if let Some(cursor) = pagination.cursor {
             // get the created_at of the user with the given id
-            let cursor_data = sqlx::query_as::<_, (sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>,)>(
-                "SELECT created_at FROM users WHERE id = $1",
-            )
+            let cursor_data = sqlx::query_as::<
+                _,
+                (sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>,),
+            >("SELECT created_at FROM users WHERE id = $1")
             .bind(cursor)
             .fetch_optional(&self.pool)
             .await?
@@ -274,17 +275,25 @@ impl IUserRepository for UserRepository {
 #[cfg(feature = "database-test")]
 mod test {
     use super::*;
-    use blog_domain::model::{
-        common::pagination::Pagination,
-        users::{
-            email_cipher::EmailCipher,
-            email_hash::EmailHash,
-            user::{NewUser, UpdateUser, UserRole},
+    use blog_domain::{
+        config::EmailConfig,
+        model::{
+            common::pagination::Pagination,
+            users::{
+                email_cipher::EmailCipher,
+                email_hash::EmailHash,
+                user::{NewUser, UpdateUser, UserRole},
+            },
         },
     };
     use dotenv::dotenv;
     use serial_test::serial;
     use sqlx::PgPool;
+
+    fn test_email_config() -> EmailConfig {
+        dotenv().ok();
+        EmailConfig::from_env()
+    }
 
     // Test helper functions
     async fn setup() -> (PgPool, UserRepository) {
@@ -311,9 +320,11 @@ mod test {
     }
 
     async fn create_test_user(repository: &UserRepository, name_suffix: &str) -> User {
+        let email_config = test_email_config();
         let unique_email = format!("test-{}@example.com", name_suffix);
-        let email_cipher = EmailCipher::from_plaintext(&unique_email).unwrap();
-        let email_hash = EmailHash::from_plaintext(&unique_email);
+        let email_cipher =
+            EmailCipher::from_plaintext(&unique_email, &email_config.encryption_key).unwrap();
+        let email_hash = EmailHash::from_plaintext(&unique_email, &email_config.pepper);
         let new_user = NewUser::new(
             "test-idp",
             &format!("test-idp-sub-{}", name_suffix),
@@ -369,9 +380,11 @@ mod test {
         let (_, repository) = setup().await;
         let mut guard = TestUserGuard::new(&repository);
 
+        let email_config = test_email_config();
         let unique_email = format!("create-{}@example.com", Uuid::new_v4());
-        let email_cipher = EmailCipher::from_plaintext(&unique_email).unwrap();
-        let email_hash = EmailHash::from_plaintext(&unique_email);
+        let email_cipher =
+            EmailCipher::from_plaintext(&unique_email, &email_config.encryption_key).unwrap();
+        let email_hash = EmailHash::from_plaintext(&unique_email, &email_config.pepper);
         let new_user = NewUser::new(
             "test-idp",
             &format!("test-idp-sub-{}", Uuid::new_v4()),
@@ -409,10 +422,12 @@ mod test {
         let (_, repository) = setup().await;
         let mut guard = TestUserGuard::new(&repository);
 
+        let email_config = test_email_config();
         let provider_sub = format!("test-idp-sub-{}", Uuid::new_v4());
         let unique_email = format!("identity-{}@example.com", Uuid::new_v4());
-        let email_cipher = EmailCipher::from_plaintext(&unique_email).unwrap();
-        let email_hash = EmailHash::from_plaintext(&unique_email);
+        let email_cipher =
+            EmailCipher::from_plaintext(&unique_email, &email_config.encryption_key).unwrap();
+        let email_hash = EmailHash::from_plaintext(&unique_email, &email_config.pepper);
         let new_user = NewUser::new("test-idp", &provider_sub, email_cipher, email_hash, true);
 
         let user = repository.create(new_user).await.unwrap();
@@ -514,10 +529,7 @@ mod test {
             name: Some(new_name.clone()),
         };
 
-        let updated_user = repository
-            .update(user.id, update_payload)
-            .await
-            .unwrap();
+        let updated_user = repository.update(user.id, update_payload).await.unwrap();
 
         assert_eq!(updated_user.id, user.id);
         assert_eq!(updated_user.name, new_name);

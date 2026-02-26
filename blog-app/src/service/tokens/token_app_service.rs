@@ -1,4 +1,5 @@
 use super::error::TokenServiceError;
+use crate::config::TokenConfig;
 use crate::service::tokens::token_service::TokenService;
 use blog_domain::model::{
     tokens::{
@@ -12,14 +13,17 @@ use jsonwebtoken::{Algorithm, DecodingKey, TokenData, Validation};
 
 pub struct TokenAppService<T: ITokenRepository> {
     repository: T,
+    firebase_project_id: String,
     service: TokenService,
 }
 
 impl<T: ITokenRepository> TokenAppService<T> {
-    pub fn new(repository: T) -> Self {
+    pub fn new(repository: T, config: TokenConfig) -> Self {
+        let firebase_project_id = config.firebase_project_id.clone();
         Self {
             repository,
-            service: TokenService::default(),
+            firebase_project_id,
+            service: TokenService::new(config),
         }
     }
 
@@ -40,10 +44,8 @@ impl<T: ITokenRepository> TokenAppService<T> {
 
         let validation = {
             let mut validation = Validation::new(Algorithm::RS256);
-            let audience = std::env::var("FIREBASE_PROJECT_ID")
-                .map_err(|e| TokenServiceError::InternalError(format!("Missing FIREBASE_PROJECT_ID: {}", e)))?;
-            validation.set_audience(&[audience.clone()]);
-            let issuer = format!("https://securetoken.google.com/{}", audience);
+            validation.set_audience(&[self.firebase_project_id.clone()]);
+            let issuer = format!("https://securetoken.google.com/{}", self.firebase_project_id);
             validation.set_issuer(&[issuer]);
             validation
         };
