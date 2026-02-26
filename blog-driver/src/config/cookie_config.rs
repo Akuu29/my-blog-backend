@@ -1,6 +1,5 @@
 use cookie::SameSite;
 use serde::Deserialize;
-use std::env;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CookieConfig {
@@ -32,10 +31,8 @@ impl SameSiteConfig {
 }
 
 impl CookieConfig {
-    pub fn from_env() -> Self {
-        let environment = env::var("ENVIRONMENT").expect("Undefined ENVIRONMENT");
-
-        match environment.as_str() {
+    pub fn for_environment(environment: &str) -> Self {
+        match environment {
             "prd" => Self::production(),
             "stg" => Self::staging(),
             "dev" => Self::development(),

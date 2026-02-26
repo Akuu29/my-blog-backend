@@ -50,6 +50,7 @@ impl AppRouter {
     >(
         cors_layer: CorsLayer,
         app_state: AppState,
+        max_request_body_size: usize,
         token_app_service: TokenAppService<TokenRepo>,
         user_app_service: UserAppService<UserRepo>,
         article_app_service: ArticleAppService<ArticleRepo, TagRep>,
@@ -87,11 +88,6 @@ impl AppRouter {
             tags_attached_article_query_service,
         );
         let image_router = Self::create_image_router::<TokenRepo, ImageRepo>(image_app_service);
-
-        let max_request_body_size = std::env::var("MAX_REQUEST_BODY_SIZE")
-            .expect("undefined MAX_REQUEST_BODY_SIZE")
-            .parse::<usize>()
-            .unwrap();
 
         let router = Router::new()
             .route("/hello-world", get(|| async { "Hello, world!" }))
