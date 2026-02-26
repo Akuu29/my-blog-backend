@@ -27,7 +27,11 @@ use http::{
     HeaderValue,
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE},
 };
-use sqlx::PgPool;
+use sqlx::{
+    PgPool,
+    postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
+};
+use std::str::FromStr;
 use tower_http::cors::CorsLayer;
 
 mod app_router;
@@ -41,10 +45,31 @@ pub async fn run() {
 
     let database_url = std::env::var("DATABASE_URL").expect("undefined DATABASE_URL");
     tracing::info!("start connecting to database");
-    let pool = PgPool::connect(&database_url).await.expect(&format!(
-        "failed to connect to database, url is {}",
-        database_url
-    ));
+
+    let app_env = std::env::var("ENVIRONMENT")
+        .unwrap_or_default()
+        .to_uppercase();
+    let ca_cert_key = format!("{}_DB_CA_CERT", app_env);
+    let pool = match std::env::var(&ca_cert_key) {
+        Ok(pem) => {
+            tracing::info!("connecting to database with SSL ({})", ca_cert_key);
+            let options = PgConnectOptions::from_str(&database_url)
+                .expect("invalid DATABASE_URL")
+                .ssl_mode(PgSslMode::VerifyFull)
+                .ssl_root_cert_from_pem(pem.into_bytes());
+            PgPoolOptions::new()
+                .connect_with(options)
+                .await
+                .expect("failed to connect to database with SSL")
+        }
+        Err(_) => {
+            tracing::info!("connecting to database without SSL");
+            PgPool::connect(&database_url).await.expect(&format!(
+                "failed to connect to database, url is {}",
+                database_url
+            ))
+        }
+    };
 
     let http_client = reqwest::Client::new();
 
