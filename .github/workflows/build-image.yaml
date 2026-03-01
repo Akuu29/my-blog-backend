@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - stg
+      - prd
     paths:
       - "blog-**/**"
       - "Docker/**"
