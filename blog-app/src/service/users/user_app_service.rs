@@ -1,4 +1,4 @@
-use super::UserUsecaseError;
+use crate::service::error::UsecaseError;
 use blog_domain::{
     model::{
         common::{item_count::ItemCount, pagination::Pagination},
@@ -20,40 +20,31 @@ impl<T: IUserRepository> UserAppService<T> {
         Self { repository }
     }
 
-    pub async fn create(&self, payload: NewUser) -> Result<User, UserUsecaseError> {
-        self.repository
-            .create(payload)
-            .await
-            .map_err(|e| UserUsecaseError::RepositoryError(e.to_string()))
+    pub async fn create(&self, payload: NewUser) -> Result<User, UsecaseError> {
+        Ok(self.repository.create(payload).await?)
     }
 
     pub async fn all(
         &self,
         user_filter: UserFilter,
         pagination: Pagination,
-    ) -> Result<(Vec<User>, ItemCount), UserUsecaseError> {
-        self.repository
-            .all(user_filter, pagination)
-            .await
-            .map_err(|e| UserUsecaseError::RepositoryError(e.to_string()))
+    ) -> Result<(Vec<User>, ItemCount), UsecaseError> {
+        Ok(self.repository.all(user_filter, pagination).await?)
     }
 
-    pub async fn find(&self, user_id: Uuid) -> Result<User, UserUsecaseError> {
-        self.repository
-            .find(user_id)
-            .await
-            .map_err(|e| UserUsecaseError::RepositoryError(e.to_string()))
+    pub async fn find(&self, user_id: Uuid) -> Result<User, UsecaseError> {
+        Ok(self.repository.find(user_id).await?)
     }
 
     pub async fn find_by_user_identity(
         &self,
         provider_name: &str,
         idp_sub: &str,
-    ) -> Result<User, UserUsecaseError> {
-        self.repository
+    ) -> Result<User, UsecaseError> {
+        Ok(self
+            .repository
             .find_by_user_identity(provider_name, idp_sub)
-            .await
-            .map_err(|e| UserUsecaseError::RepositoryError(e.to_string()))
+            .await?)
     }
 
     pub async fn update_with_auth(
@@ -61,28 +52,22 @@ impl<T: IUserRepository> UserAppService<T> {
         user_id: Uuid,
         authenticated_user_id: Uuid,
         payload: UpdateUser,
-    ) -> Result<User, UserUsecaseError> {
+    ) -> Result<User, UsecaseError> {
         // Verify that the user is acting on their own account
         UserService::verify_self(user_id, authenticated_user_id)?;
 
-        self.repository
-            .update(user_id, payload)
-            .await
-            .map_err(|e| UserUsecaseError::RepositoryError(e.to_string()))
+        Ok(self.repository.update(user_id, payload).await?)
     }
 
     pub async fn delete_with_auth(
         &self,
         user_id: Uuid,
         authenticated_user_id: Uuid,
-    ) -> Result<(), UserUsecaseError> {
+    ) -> Result<(), UsecaseError> {
         // Verify that the user is acting on their own account
         UserService::verify_self(user_id, authenticated_user_id)?;
 
-        self.repository
-            .delete(user_id)
-            .await
-            .map_err(|e| UserUsecaseError::RepositoryError(e.to_string()))?;
+        self.repository.delete(user_id).await?;
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use super::TagUsecaseError;
+use crate::service::error::UsecaseError;
 use blog_domain::{
     model::{
         common::{item_count::ItemCount, pagination::Pagination},
@@ -25,29 +25,31 @@ impl<T: ITagRepository> TagAppService<T> {
         }
     }
 
-    pub async fn create(&self, user_id: Uuid, payload: NewTag) -> anyhow::Result<Tag> {
-        self.repository.create(user_id, payload).await
+    pub async fn create(
+        &self,
+        user_id: Uuid,
+        payload: NewTag,
+    ) -> Result<Tag, UsecaseError> {
+        Ok(self.repository.create(user_id, payload).await?)
     }
 
     pub async fn all(
         &self,
         tag_filter: TagFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Tag>, ItemCount)> {
-        self.repository.all(tag_filter, pagination).await
+    ) -> Result<(Vec<Tag>, ItemCount), UsecaseError> {
+        Ok(self.repository.all(tag_filter, pagination).await?)
     }
 
     pub async fn delete_with_auth(
         &self,
         user_id: Uuid,
         tag_id: Uuid,
-    ) -> Result<(), TagUsecaseError> {
+    ) -> Result<(), UsecaseError> {
         // Verify tag ownership
         self.tag_service.verify_ownership(tag_id, user_id).await?;
 
-        self.repository
-            .delete(tag_id)
-            .await
-            .map_err(|e| TagUsecaseError::RepositoryError(e.to_string()))
+        self.repository.delete(tag_id).await?;
+        Ok(())
     }
 }
