@@ -1,7 +1,4 @@
-use crate::{
-    error::{ErrorCode, ErrorResponse},
-    model::api_response::ApiResponse,
-};
+use crate::model::{api_response::ApiResponse, error_response::{ErrorCode, ErrorResponse}};
 use axum::{
     async_trait,
     extract::FromRequestParts,
@@ -32,8 +29,6 @@ where
             }
             _ => {
                 let err_msg = "No token provided";
-                tracing::error!(error.kind="Authentication", error.message=%err_msg);
-
                 let err_res_body = ErrorResponse::new(ErrorCode::Unauthorized, err_msg);
                 Err(ApiResponse::new(
                     StatusCode::UNAUTHORIZED,

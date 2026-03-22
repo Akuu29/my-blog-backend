@@ -44,7 +44,7 @@ where
             let token_data = token_app_service
                 .verify_access_token(token_string)
                 .await
-                .map_err(|e| AppError::from(e))?;
+                .map_err(AppError::from)?;
             (
                 Some(token_data.claims.sub()),
                 token_data.claims.name().to_string(),
@@ -63,7 +63,7 @@ where
     let comment = comment_app_service
         .create(user_id, user_name, payload)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -83,7 +83,7 @@ where
     let comment = comment_app_service
         .find(comment_id)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -107,7 +107,7 @@ where
     let (mut comments, total) = comment_app_service
         .all(param.filter, pagination.clone())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let has_next = comments.len() == pagination.per_page as usize;
     if has_next {
@@ -141,12 +141,12 @@ where
     let token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let comment = comment_app_service
         .update_with_auth(comment_id, token_data.claims.sub(), payload)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -172,12 +172,12 @@ where
     let token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     comment_app_service
         .delete_with_auth(comment_id, token_data.claims.sub())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }

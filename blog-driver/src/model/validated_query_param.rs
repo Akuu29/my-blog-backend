@@ -1,6 +1,6 @@
-use crate::{
-    error::{ErrorCode, ErrorResponse},
-    model::api_response::ApiResponse,
+use crate::model::{
+    api_response::ApiResponse,
+    error_response::{ErrorCode, ErrorResponse},
 };
 use axum::{
     async_trait,
@@ -26,8 +26,6 @@ where
         let query_string = req.uri().query().unwrap_or_default();
         let qs_config = serde_qs::Config::new(5, false);
         let val = qs_config.deserialize_str::<T>(query_string).map_err(|e| {
-            tracing::error!(error.kind="Unexpected", error.message=%e.to_string());
-
             let res_body = ErrorResponse::new(
                 ErrorCode::InvalidInput,
                 format!("Invalid query param: {}", e),
@@ -40,8 +38,6 @@ where
         })?;
 
         val.validate().map_err(|e| {
-            tracing::error!(error.kind="Validation", error.message=%e.to_string());
-
             let res_body = ErrorResponse::new(
                 ErrorCode::ValidationError,
                 format!("Validation error: {}", e).replace("\n", ", "),

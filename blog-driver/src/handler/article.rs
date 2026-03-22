@@ -47,12 +47,12 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let article = article_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -73,7 +73,7 @@ where
     let article = article_app_service
         .find(article_id, ArticleFilter::default())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -98,7 +98,7 @@ where
     let (mut articles, total) = article_app_service
         .all(param.filter, pagination.clone())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let has_next = articles.len() == pagination.per_page as usize;
     if has_next {
@@ -133,14 +133,14 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let user_id = access_token_data.claims.sub();
 
     let article = article_app_service
         .update_with_auth(user_id, article_id, payload)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -167,7 +167,7 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let user_id = access_token_data.claims.sub();
 
@@ -175,7 +175,7 @@ where
         .delete_with_auth(user_id, article_id)
         .await
         .map(|_| ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
@@ -199,14 +199,14 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let user_id = access_token_data.claims.sub();
 
     article_app_service
         .attach_tags_with_auth(user_id, article_id, tag_ids)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::<()>::new(StatusCode::OK, None, None))
 }
@@ -229,7 +229,7 @@ where
     let (mut articles, total) = articles_by_tag_query_service
         .find_article_title_by_tag(filter, pagination.clone())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let has_next = articles.len() == pagination.per_page as usize;
     if has_next {

@@ -1,7 +1,4 @@
-use crate::{
-    error::{ErrorCode, ErrorResponse},
-    model::api_response::ApiResponse,
-};
+use crate::model::{api_response::ApiResponse, error_response::{ErrorCode, ErrorResponse}};
 use axum::extract::Multipart;
 use axum::{
     async_trait,
@@ -29,8 +26,7 @@ where
 
     #[tracing::instrument(name = "validated_image", skip(state))]
     async fn from_request(req: Request, state: &B) -> Result<Self, Self::Rejection> {
-        let mut multipart = Multipart::from_request(req, state).await.map_err(|e| {
-            tracing::error!(error.kind="Unexpected", error=%e);
+        let mut multipart = Multipart::from_request(req, state).await.map_err(|_e| {
             api_error_response(
                 ErrorCode::InvalidInput,
                 "Invalid multipart request".to_string(),
@@ -43,7 +39,6 @@ where
         let mut article_id = None;
 
         while let Some(field) = multipart.next_field().await.map_err(|e| {
-            tracing::error!(error.kind="Unexpected", error=%e.to_string());
             api_error_response(
                 ErrorCode::InvalidInput,
                 format!("Failed to process multipart form data: {}", e),
@@ -63,8 +58,7 @@ where
 
             match name.as_str() {
                 "file" => {
-                    let data = field.bytes().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                    let data = field.bytes().await.map_err(|_e| {
                         api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read file data".to_string(),
@@ -74,8 +68,7 @@ where
                     file_data = data.to_vec();
                 }
                 "filename" => {
-                    filename = Some(field.text().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                    filename = Some(field.text().await.map_err(|_e| {
                         api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read filename".to_string(),
@@ -84,8 +77,7 @@ where
                     })?);
                 }
                 "articleId" => {
-                    article_id = Some(field.text().await.map_err(|e| {
-                        tracing::error!(error.kind="Unexpected", error=%e.to_string());
+                    article_id = Some(field.text().await.map_err(|_e| {
                         api_error_response(
                             ErrorCode::InvalidInput,
                             "Failed to read articleId".to_string(),
@@ -120,8 +112,7 @@ where
                 )
             })?
             .parse::<Uuid>()
-            .map_err(|e| {
-                tracing::error!(error.kind="Unexpected", error=%e.to_string());
+            .map_err(|_e| {
                 api_error_response(
                     ErrorCode::InvalidInput,
                     "Failed to parse articleId".to_string(),
@@ -139,8 +130,6 @@ where
         };
 
         new_image.validate().map_err(|e| {
-            tracing::error!(error.kind ="Validation", error.message=%e.to_string());
-
             let (status_code, err_msg) = e
                 .field_errors()
                 .iter()
