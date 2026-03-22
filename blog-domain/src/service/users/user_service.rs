@@ -1,4 +1,4 @@
-use super::UserServiceError;
+use crate::service::error::DomainServiceError;
 use uuid::Uuid;
 
 pub struct UserService;
@@ -8,9 +8,9 @@ impl UserService {
     pub fn verify_self(
         requested_user_id: Uuid,
         authenticated_user_id: Uuid,
-    ) -> Result<(), UserServiceError> {
+    ) -> Result<(), DomainServiceError> {
         if requested_user_id != authenticated_user_id {
-            return Err(UserServiceError::Unauthorized);
+            return Err(DomainServiceError::Unauthorized);
         }
 
         Ok(())

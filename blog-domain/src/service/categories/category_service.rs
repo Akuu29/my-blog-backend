@@ -1,5 +1,5 @@
-use super::CategoryServiceError;
 use crate::model::categories::i_category_repository::ICategoryRepository;
+use crate::service::error::DomainServiceError;
 use uuid::Uuid;
 
 pub struct CategoryService<T>
@@ -22,14 +22,11 @@ where
         &self,
         category_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(), CategoryServiceError> {
-        let category = self.repository.find(category_id).await.map_err(|_| {
-            // TODO Propagation of repository errors.
-            CategoryServiceError::NotFound
-        })?;
+    ) -> Result<(), DomainServiceError> {
+        let category = self.repository.find(category_id).await?;
 
         if category.user_id != user_id {
-            return Err(CategoryServiceError::Unauthorized);
+            return Err(DomainServiceError::Unauthorized);
         }
 
         Ok(())

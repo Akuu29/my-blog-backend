@@ -1,5 +1,5 @@
-use super::ImageServiceError;
 use crate::model::images::i_image_repository::IImageRepository;
+use crate::service::error::DomainServiceError;
 use uuid::Uuid;
 
 pub struct ImageService<T>
@@ -22,16 +22,15 @@ where
         &self,
         image_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(), ImageServiceError> {
+    ) -> Result<(), DomainServiceError> {
         let image_with_owner = self
             .repository
             .find_with_owner(image_id)
-            .await
-            .map_err(|e| ImageServiceError::InternalError(e.to_string()))?
-            .ok_or(ImageServiceError::NotFound)?;
+            .await?
+            .ok_or(DomainServiceError::NotFound)?;
 
         if image_with_owner.article_owner_id != user_id {
-            return Err(ImageServiceError::Unauthorized);
+            return Err(DomainServiceError::Unauthorized);
         }
 
         Ok(())
