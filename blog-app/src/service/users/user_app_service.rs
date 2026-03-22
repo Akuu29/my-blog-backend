@@ -2,12 +2,13 @@ use crate::service::error::UsecaseError;
 use blog_domain::{
     model::{
         common::{item_count::ItemCount, pagination::Pagination},
+        error::RepositoryError,
         users::{
             i_user_repository::{IUserRepository, UserFilter},
             user::{NewUser, UpdateUser, User},
         },
     },
-    service::users::UserService,
+    service::{error::DomainServiceError, users::UserService},
 };
 use sqlx::types::Uuid;
 
@@ -41,10 +42,15 @@ impl<T: IUserRepository> UserAppService<T> {
         provider_name: &str,
         idp_sub: &str,
     ) -> Result<User, UsecaseError> {
-        Ok(self
-            .repository
+        self.repository
             .find_by_user_identity(provider_name, idp_sub)
-            .await?)
+            .await
+            .map_err(|e| match e {
+                RepositoryError::NotFound => {
+                    UsecaseError::DomainError(DomainServiceError::NotFound)
+                }
+                e => UsecaseError::Repository(e),
+            })
     }
 
     pub async fn update_with_auth(
