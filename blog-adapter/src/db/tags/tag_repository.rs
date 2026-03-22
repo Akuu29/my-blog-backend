@@ -1,11 +1,13 @@
-use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::model::{
-    common::{item_count::ItemCount, pagination::Pagination},
-    tags::{
-        i_tag_repository::{ITagRepository, TagFilter},
-        tag::{NewTag, Tag},
+use blog_domain::{
+    model::{
+        common::{item_count::ItemCount, pagination::Pagination},
+        tags::{
+            i_tag_repository::{ITagRepository, TagFilter},
+            tag::{NewTag, Tag},
+        },
     },
+    model::error::RepositoryError,
 };
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -52,7 +54,7 @@ impl TagRepository {
 
 #[async_trait]
 impl ITagRepository for TagRepository {
-    async fn create(&self, user_id: Uuid, payload: NewTag) -> anyhow::Result<Tag> {
+    async fn create(&self, user_id: Uuid, payload: NewTag) -> Result<Tag, RepositoryError> {
         let tag = sqlx::query_as::<_, Tag>(
             r#"
             INSERT INTO tags (
@@ -72,12 +74,13 @@ impl ITagRepository for TagRepository {
         .bind(payload.name)
         .bind(user_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok(tag)
     }
 
-    async fn find(&self, tag_id: Uuid) -> anyhow::Result<Tag> {
+    async fn find(&self, tag_id: Uuid) -> Result<Tag, RepositoryError> {
         let tag = sqlx::query_as::<_, Tag>(
             r#"
             SELECT
@@ -95,8 +98,8 @@ impl ITagRepository for TagRepository {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| match e {
-            sqlx::Error::RowNotFound => RepositoryError::NotFound.into(),
-            e => anyhow::anyhow!(e),
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
         })?;
 
         Ok(tag)
@@ -106,7 +109,7 @@ impl ITagRepository for TagRepository {
         &self,
         tag_filter: TagFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Tag>, ItemCount)> {
+    ) -> Result<(Vec<Tag>, ItemCount), RepositoryError> {
         // find tags
         let mut qb = QueryBuilder::new(
             r#"
@@ -135,7 +138,8 @@ impl ITagRepository for TagRepository {
             >("SELECT created_at FROM tags WHERE id = $1")
             .bind(cursor)
             .fetch_optional(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
             let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
@@ -158,7 +162,11 @@ impl ITagRepository for TagRepository {
 
         qb.push(" LIMIT ").push_bind(pagination.per_page);
 
-        let tags = qb.build_query_as::<Tag>().fetch_all(&self.pool).await?;
+        let tags = qb
+            .build_query_as::<Tag>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         // count total tags
         let mut qb = QueryBuilder::new(
@@ -174,12 +182,13 @@ impl ITagRepository for TagRepository {
         let total = qb
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok((tags, total))
     }
 
-    async fn delete(&self, tag_id: Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, tag_id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
             DELETE FROM tags
@@ -192,7 +201,7 @@ impl ITagRepository for TagRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
         })?;
 
         Ok(())

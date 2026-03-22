@@ -1,6 +1,9 @@
 use crate::config::FirebaseConfig;
 use async_trait::async_trait;
-use blog_domain::model::tokens::i_token_repository::ITokenRepository;
+use blog_domain::{
+    model::tokens::i_token_repository::ITokenRepository,
+    model::error::RepositoryError,
+};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -17,14 +20,16 @@ impl TokenRepository {
 
 #[async_trait]
 impl ITokenRepository for TokenRepository {
-    async fn fetch_jwks(&self) -> anyhow::Result<HashMap<String, String>> {
+    async fn fetch_jwks(&self) -> Result<HashMap<String, String>, RepositoryError> {
         let jwks = self
             .client
             .get(&self.config.jwks_url)
             .send()
-            .await?
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?
             .json::<HashMap<String, String>>()
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok(jwks)
     }

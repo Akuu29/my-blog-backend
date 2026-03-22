@@ -1,4 +1,3 @@
-use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
 use blog_app::query_service::articles_by_tag::i_articles_by_tag_query_service::{
     ArticlesByTagFilter, IArticlesByTagQueryService,
@@ -81,7 +80,7 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
             .fetch_optional(&self.pool)
             .await?;
 
-            let cursor_ts = cursor_ts.ok_or(RepositoryError::NotFound)?;
+            let cursor_ts = cursor_ts.ok_or(anyhow::anyhow!("cursor not found"))?;
             qb.push(" AND (a.created_at, a.id) < (")
                 .push_bind(cursor_ts)
                 .push(", ")

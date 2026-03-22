@@ -1,8 +1,10 @@
-use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::model::images::{
-    i_image_repository::{IImageRepository, ImageFilter},
-    image::{ImageData, ImageDataProps, ImageWithOwner, NewImage},
+use blog_domain::{
+    model::images::{
+        i_image_repository::{IImageRepository, ImageFilter},
+        image::{ImageData, ImageDataProps, ImageWithOwner, NewImage},
+    },
+    model::error::RepositoryError,
 };
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -20,7 +22,7 @@ impl ImageRepository {
 
 #[async_trait]
 impl IImageRepository for ImageRepository {
-    async fn create(&self, new_image: NewImage) -> anyhow::Result<ImageDataProps> {
+    async fn create(&self, new_image: NewImage) -> Result<ImageDataProps, RepositoryError> {
         let image = sqlx::query_as::<_, ImageDataProps>(
             r#"
             INSERT INTO images (
@@ -54,13 +56,13 @@ impl IImageRepository for ImageRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
         })?;
 
         Ok(image)
     }
 
-    async fn all(&self, filter: ImageFilter) -> anyhow::Result<Vec<ImageDataProps>> {
+    async fn all(&self, filter: ImageFilter) -> Result<Vec<ImageDataProps>, RepositoryError> {
         let mut qb = QueryBuilder::new(
             r"
             SELECT
@@ -98,12 +100,13 @@ impl IImageRepository for ImageRepository {
         let images = qb
             .build_query_as::<ImageDataProps>()
             .fetch_all(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok(images)
     }
 
-    async fn find_data(&self, image_id: Uuid) -> anyhow::Result<ImageData> {
+    async fn find_data(&self, image_id: Uuid) -> Result<ImageData, RepositoryError> {
         let image_data = sqlx::query_as::<_, ImageData>(
             r#"
             SELECT
@@ -119,13 +122,16 @@ impl IImageRepository for ImageRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
         })?;
 
         Ok(image_data)
     }
 
-    async fn find_with_owner(&self, image_id: Uuid) -> anyhow::Result<Option<ImageWithOwner>> {
+    async fn find_with_owner(
+        &self,
+        image_id: Uuid,
+    ) -> Result<Option<ImageWithOwner>, RepositoryError> {
         let image_with_owner = sqlx::query_as::<_, ImageWithOwner>(
             r#"
             SELECT
@@ -142,12 +148,13 @@ impl IImageRepository for ImageRepository {
         )
         .bind(image_id)
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok(image_with_owner)
     }
 
-    async fn delete(&self, image_id: Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, image_id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
             DELETE FROM images
@@ -160,7 +167,7 @@ impl IImageRepository for ImageRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
         })?;
 
         Ok(())

@@ -1,11 +1,13 @@
-use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::model::{
-    articles::{
-        article::{Article, NewArticle, UpdateArticle},
-        i_article_repository::{ArticleFilter, IArticleRepository},
+use blog_domain::{
+    model::error::RepositoryError,
+    model::{
+        articles::{
+            article::{Article, NewArticle, UpdateArticle},
+            i_article_repository::{ArticleFilter, IArticleRepository},
+        },
+        common::{item_count::ItemCount, pagination::Pagination},
     },
-    common::{item_count::ItemCount, pagination::Pagination},
 };
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -63,7 +65,11 @@ impl ArticleRepository {
 
 #[async_trait]
 impl IArticleRepository for ArticleRepository {
-    async fn create(&self, user_id: Uuid, new_article: NewArticle) -> anyhow::Result<Article> {
+    async fn create(
+        &self,
+        user_id: Uuid,
+        new_article: NewArticle,
+    ) -> Result<Article, RepositoryError> {
         let article = sqlx::query_as::<_, Article>(
             r#"
             INSERT INTO articles (
@@ -91,7 +97,8 @@ impl IArticleRepository for ArticleRepository {
         .bind(new_article.category_id)
         .bind(user_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok(article)
     }
@@ -100,7 +107,7 @@ impl IArticleRepository for ArticleRepository {
         &self,
         article_id: Uuid,
         article_filter: ArticleFilter,
-    ) -> anyhow::Result<Article> {
+    ) -> Result<Article, RepositoryError> {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
@@ -133,7 +140,7 @@ impl IArticleRepository for ArticleRepository {
             .await
             .map_err(|e| match e {
                 sqlx::Error::RowNotFound => RepositoryError::NotFound,
-                e => RepositoryError::Unexpected(e.to_string()),
+                e => RepositoryError::Unknown(anyhow::anyhow!(e)),
             })?;
 
         Ok(article)
@@ -143,7 +150,7 @@ impl IArticleRepository for ArticleRepository {
         &self,
         article_filter: ArticleFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Article>, ItemCount)> {
+    ) -> Result<(Vec<Article>, ItemCount), RepositoryError> {
         // find articles
         let mut qb = QueryBuilder::new(
             r#"
@@ -176,7 +183,8 @@ impl IArticleRepository for ArticleRepository {
             >("SELECT created_at FROM articles WHERE id = $1")
             .bind(cursor)
             .fetch_optional(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
             let cursor_ts = cursor_ts.ok_or(RepositoryError::NotFound)?;
             if has_condition {
@@ -199,7 +207,11 @@ impl IArticleRepository for ArticleRepository {
 
         qb.push(" LIMIT ").push_bind(pagination.per_page);
 
-        let articles = qb.build_query_as::<Article>().fetch_all(&self.pool).await?;
+        let articles = qb
+            .build_query_as::<Article>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         // count total articles
         let mut qb = QueryBuilder::new(
@@ -215,7 +227,8 @@ impl IArticleRepository for ArticleRepository {
         let total = qb
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok((articles, total))
     }
@@ -224,7 +237,7 @@ impl IArticleRepository for ArticleRepository {
         &self,
         article_id: Uuid,
         update_article: UpdateArticle,
-    ) -> anyhow::Result<Article> {
+    ) -> Result<Article, RepositoryError> {
         let pre_payload = self.find(article_id, ArticleFilter::default()).await?;
         let article = sqlx::query_as::<_, Article>(
             r#"
@@ -261,12 +274,13 @@ impl IArticleRepository for ArticleRepository {
         .bind(update_article.category_id)
         .bind(article_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok(article)
     }
 
-    async fn delete(&self, article_id: Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, article_id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
             DELETE FROM articles
@@ -279,14 +293,22 @@ impl IArticleRepository for ArticleRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
         })?;
 
         Ok(())
     }
 
-    async fn attach_tags(&self, article_id: Uuid, tag_ids: Vec<Uuid>) -> anyhow::Result<()> {
-        let mut tx = self.pool.begin().await?;
+    async fn attach_tags(
+        &self,
+        article_id: Uuid,
+        tag_ids: Vec<Uuid>,
+    ) -> Result<(), RepositoryError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         // delete all tags for the article
         sqlx::query("DELETE FROM tagged_articles WHERE article_id = $1")
@@ -295,7 +317,7 @@ impl IArticleRepository for ArticleRepository {
             .await
             .map_err(|e| match e {
                 sqlx::Error::RowNotFound => RepositoryError::NotFound,
-                e => RepositoryError::Unexpected(e.to_string()),
+                e => RepositoryError::Unknown(anyhow::anyhow!(e)),
             })?;
 
         // bulk insert new tags
@@ -309,9 +331,12 @@ impl IArticleRepository for ArticleRepository {
         .bind(article_id)
         .bind(tag_ids)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
-        tx.commit().await?;
+        tx.commit()
+            .await
+            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
 
         Ok(())
     }
