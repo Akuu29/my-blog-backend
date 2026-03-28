@@ -54,7 +54,7 @@ impl IUserRepository for UserRepository {
             .pool
             .begin()
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         let user = sqlx::query_as::<_, User>(
             r#"
@@ -67,7 +67,7 @@ impl IUserRepository for UserRepository {
         .bind(payload.role)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         sqlx::query(
             r#"
@@ -103,11 +103,11 @@ impl IUserRepository for UserRepository {
         .bind(payload.identity.is_primary)
         .execute(&mut *tx)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         tx.commit()
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
         Ok(user)
     }
 
@@ -148,7 +148,7 @@ impl IUserRepository for UserRepository {
             .bind(cursor)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?
             .ok_or(RepositoryError::NotFound)?;
 
             if has_condition {
@@ -175,7 +175,7 @@ impl IUserRepository for UserRepository {
             .build_query_as::<User>()
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // count total users
         let mut qb = QueryBuilder::new(
@@ -190,7 +190,7 @@ impl IUserRepository for UserRepository {
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok((users, total))
     }
@@ -215,7 +215,7 @@ impl IUserRepository for UserRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(user)
@@ -249,7 +249,7 @@ impl IUserRepository for UserRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(user)
@@ -268,7 +268,7 @@ impl IUserRepository for UserRepository {
         .bind(user_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(user)
     }
@@ -285,7 +285,7 @@ impl IUserRepository for UserRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())

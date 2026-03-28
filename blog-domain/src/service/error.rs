@@ -8,8 +8,8 @@ pub enum DomainServiceError {
     Unauthorized,
     #[error("Resource already exists")]
     Conflict,
-    #[error("Unexpected error")]
-    Unknown(#[from] anyhow::Error),
+    #[error("Unexpected error: {0}")]
+    Unknown(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl DomainServiceError {

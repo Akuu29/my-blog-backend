@@ -75,7 +75,7 @@ impl ITagRepository for TagRepository {
         .bind(user_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(tag)
     }
@@ -99,7 +99,7 @@ impl ITagRepository for TagRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(tag)
@@ -139,7 +139,7 @@ impl ITagRepository for TagRepository {
             .bind(cursor)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
             let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
@@ -166,7 +166,7 @@ impl ITagRepository for TagRepository {
             .build_query_as::<Tag>()
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // count total tags
         let mut qb = QueryBuilder::new(
@@ -183,7 +183,7 @@ impl ITagRepository for TagRepository {
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok((tags, total))
     }
@@ -201,7 +201,7 @@ impl ITagRepository for TagRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())

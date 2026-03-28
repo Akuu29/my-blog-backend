@@ -26,10 +26,10 @@ impl ITokenRepository for TokenRepository {
             .get(&self.config.jwks_url)
             .send()
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?
             .json::<HashMap<String, String>>()
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(jwks)
     }

@@ -7,8 +7,8 @@ pub enum RepositoryError {
     NotFound,
     #[error("Resource already exists")]
     Conflict,
-    #[error("Unexpected error")]
-    Unknown(#[from] anyhow::Error),
+    #[error("Unexpected error: {0}")]
+    Unknown(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl RepositoryError {

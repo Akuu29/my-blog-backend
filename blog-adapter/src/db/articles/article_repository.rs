@@ -98,7 +98,7 @@ impl IArticleRepository for ArticleRepository {
         .bind(user_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(article)
     }
@@ -140,7 +140,7 @@ impl IArticleRepository for ArticleRepository {
             .await
             .map_err(|e| match e {
                 sqlx::Error::RowNotFound => RepositoryError::NotFound,
-                e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+                e => RepositoryError::Unknown(Box::new(e)),
             })?;
 
         Ok(article)
@@ -184,7 +184,7 @@ impl IArticleRepository for ArticleRepository {
             .bind(cursor)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
             let cursor_ts = cursor_ts.ok_or(RepositoryError::NotFound)?;
             if has_condition {
@@ -211,7 +211,7 @@ impl IArticleRepository for ArticleRepository {
             .build_query_as::<Article>()
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // count total articles
         let mut qb = QueryBuilder::new(
@@ -228,7 +228,7 @@ impl IArticleRepository for ArticleRepository {
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok((articles, total))
     }
@@ -275,7 +275,7 @@ impl IArticleRepository for ArticleRepository {
         .bind(article_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(article)
     }
@@ -293,7 +293,7 @@ impl IArticleRepository for ArticleRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())
@@ -308,7 +308,7 @@ impl IArticleRepository for ArticleRepository {
             .pool
             .begin()
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // delete all tags for the article
         sqlx::query("DELETE FROM tagged_articles WHERE article_id = $1")
@@ -317,7 +317,7 @@ impl IArticleRepository for ArticleRepository {
             .await
             .map_err(|e| match e {
                 sqlx::Error::RowNotFound => RepositoryError::NotFound,
-                e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+                e => RepositoryError::Unknown(Box::new(e)),
             })?;
 
         // bulk insert new tags
@@ -332,11 +332,11 @@ impl IArticleRepository for ArticleRepository {
         .bind(tag_ids)
         .execute(&mut *tx)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         tx.commit()
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(())
     }

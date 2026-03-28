@@ -82,7 +82,7 @@ impl ICommentRepository for CommentRepository {
         .bind(user_name)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(comment)
     }
@@ -133,7 +133,7 @@ impl ICommentRepository for CommentRepository {
             .await
             .map_err(|e| match e {
                 sqlx::Error::RowNotFound => RepositoryError::NotFound,
-                e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+                e => RepositoryError::Unknown(Box::new(e)),
             })?;
 
         Ok(comment)
@@ -172,7 +172,7 @@ impl ICommentRepository for CommentRepository {
             .bind(cursor)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
             let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
@@ -199,7 +199,7 @@ impl ICommentRepository for CommentRepository {
             .build_query_as::<Comment>()
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // Count total comments
         let mut qb = QueryBuilder::new(
@@ -216,7 +216,7 @@ impl ICommentRepository for CommentRepository {
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok((comments, total))
     }
@@ -250,7 +250,7 @@ impl ICommentRepository for CommentRepository {
         .bind(comment_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(comment)
     }
@@ -268,7 +268,7 @@ impl ICommentRepository for CommentRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())

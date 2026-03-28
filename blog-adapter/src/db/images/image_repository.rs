@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use blog_domain::{
+    model::error::RepositoryError,
     model::images::{
         i_image_repository::{IImageRepository, ImageFilter},
         image::{ImageData, ImageDataProps, ImageWithOwner, NewImage},
     },
-    model::error::RepositoryError,
 };
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -56,7 +56,7 @@ impl IImageRepository for ImageRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(image)
@@ -101,7 +101,7 @@ impl IImageRepository for ImageRepository {
             .build_query_as::<ImageDataProps>()
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(images)
     }
@@ -122,7 +122,7 @@ impl IImageRepository for ImageRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(image_data)
@@ -149,7 +149,7 @@ impl IImageRepository for ImageRepository {
         .bind(image_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(image_with_owner)
     }
@@ -167,7 +167,7 @@ impl IImageRepository for ImageRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())

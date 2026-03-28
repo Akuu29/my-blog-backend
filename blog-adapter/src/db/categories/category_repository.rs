@@ -77,7 +77,7 @@ impl ICategoryRepository for CategoryRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(category)
@@ -108,7 +108,7 @@ impl ICategoryRepository for CategoryRepository {
         .bind(user_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(category)
     }
@@ -147,7 +147,7 @@ impl ICategoryRepository for CategoryRepository {
             .bind(cursor)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
             let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
@@ -174,7 +174,7 @@ impl ICategoryRepository for CategoryRepository {
             .build_query_as::<Category>()
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // count total categories
         let mut qb = QueryBuilder::new(
@@ -190,7 +190,7 @@ impl ICategoryRepository for CategoryRepository {
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok((categories, total))
     }
@@ -219,7 +219,7 @@ impl ICategoryRepository for CategoryRepository {
         .bind(category_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Unknown(anyhow::anyhow!(e)))?;
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(category)
     }
@@ -237,7 +237,7 @@ impl ICategoryRepository for CategoryRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unknown(anyhow::anyhow!(e)),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())
