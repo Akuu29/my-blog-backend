@@ -14,12 +14,10 @@ use axum::{
 };
 use axum_extra::extract::cookie::PrivateCookieJar;
 use blog_app::service::{
-    error::UsecaseError,
-    tokens::token_app_service::TokenAppService,
+    error::UsecaseError, tokens::token_app_service::TokenAppService,
     users::user_app_service::UserAppService,
 };
 use blog_domain::{
-    service::error::DomainServiceError,
     config::EmailConfig,
     model::{
         tokens::{
@@ -34,6 +32,7 @@ use blog_domain::{
             user::{NewUser, UpdateUser},
         },
     },
+    service::error::DomainServiceError,
 };
 use sqlx::types::Uuid;
 use std::{sync::Arc, time};
@@ -78,7 +77,10 @@ where
         .await;
 
     let response = match exists_user {
-        Ok(_) => Err(AppError::Unknown(anyhow::anyhow!("User already exists"))),
+        // TODO The driver layer is directly generating use case errors. This represents a leakage of responsibilities from the app layer.
+        Ok(_) => Err(AppError::from(UsecaseError::DomainError(
+            DomainServiceError::Conflict,
+        ))),
         Err(e) => match &e {
             UsecaseError::DomainError(DomainServiceError::NotFound) => {
                 let email = id_token_claims.email();
