@@ -4,7 +4,10 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use blog_app::service::{error::UsecaseError, tokens::error::TokenServiceError};
+use blog_app::{
+    query_service::error::QueryServiceError,
+    service::{error::UsecaseError, tokens::error::TokenServiceError},
+};
 use blog_domain::error::ErrorCategory;
 use thiserror::Error;
 
@@ -21,6 +24,9 @@ pub enum AppError {
 
     #[error(transparent)]
     Token(#[from] TokenServiceError),
+
+    #[error(transparent)]
+    QueryService(#[from] QueryServiceError),
 }
 
 impl AppError {
@@ -30,6 +36,7 @@ impl AppError {
             Self::Unknown(_) => ErrorCategory::Internal,
             Self::Usecase(e) => e.category(),
             Self::Token(e) => e.category(),
+            Self::QueryService(e) => e.category(),
         }
     }
 }

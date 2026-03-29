@@ -1,6 +1,9 @@
 use async_trait::async_trait;
-use blog_app::query_service::articles_by_tag::i_articles_by_tag_query_service::{
-    ArticlesByTagFilter, IArticlesByTagQueryService,
+use blog_app::query_service::{
+    articles_by_tag::i_articles_by_tag_query_service::{
+        ArticlesByTagFilter, IArticlesByTagQueryService,
+    },
+    error::QueryServiceError,
 };
 use blog_domain::model::{
     articles::article::Article,
@@ -39,7 +42,7 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
         &self,
         filter: ArticlesByTagFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Article>, ItemCount)> {
+    ) -> Result<(Vec<Article>, ItemCount), QueryServiceError> {
         // find articles
         let mut qb = QueryBuilder::new(
             r#"
@@ -78,9 +81,10 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
             >("SELECT created_at FROM articles WHERE id = $1")
             .bind(cursor)
             .fetch_optional(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| QueryServiceError::Unknown(Box::new(e)))?;
 
-            let cursor_ts = cursor_ts.ok_or(anyhow::anyhow!("cursor not found"))?;
+            let cursor_ts = cursor_ts.ok_or(QueryServiceError::InvalidCursor)?;
             qb.push(" AND (a.created_at, a.id) < (")
                 .push_bind(cursor_ts)
                 .push(", ")
@@ -96,7 +100,11 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
 
         qb.push(" LIMIT ").push_bind(pagination.per_page);
 
-        let articles = qb.build_query_as::<Article>().fetch_all(&self.pool).await?;
+        let articles = qb
+            .build_query_as::<Article>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| QueryServiceError::Unknown(Box::new(e)))?;
 
         // count total articles
         let mut qb = QueryBuilder::new(
@@ -119,7 +127,8 @@ impl IArticlesByTagQueryService for ArticlesByTagQueryService {
         let total = qb
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| QueryServiceError::Unknown(Box::new(e)))?;
 
         Ok((articles, total))
     }
