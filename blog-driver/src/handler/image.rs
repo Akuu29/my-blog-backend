@@ -36,14 +36,14 @@ where
     let _token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     tracing::Span::current().record("image.mime_type", &new_image.mime_type);
 
     let image = image_app_service
         .create(new_image)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -63,7 +63,7 @@ where
     let images = image_app_service
         .all(filter)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -83,7 +83,7 @@ where
     let image_data = image_app_service
         .find_data(image_id)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let response = ApiResponse::new(StatusCode::OK, Some(image_data.data.clone()), None)
         .with_header("Content-Type", &image_data.mime_type)
@@ -115,7 +115,7 @@ where
     let token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     tracing::Span::current().record("user.id", &token_data.claims.sub().to_string());
 
@@ -123,7 +123,7 @@ where
     image_app_service
         .delete_with_auth(image_id, token_data.claims.sub())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }

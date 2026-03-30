@@ -1,5 +1,5 @@
-use super::ArticleServiceError;
 use crate::model::articles::i_article_repository::{ArticleFilter, IArticleRepository};
+use crate::service::error::DomainServiceError;
 use uuid::Uuid;
 
 pub struct ArticleService<T>
@@ -22,18 +22,14 @@ where
         &self,
         article_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(), ArticleServiceError> {
+    ) -> Result<(), DomainServiceError> {
         let article = self
             .repository
             .find(article_id, ArticleFilter::default())
-            .await
-            .map_err(|_| {
-                // TODO Propagation of repository errors.
-                ArticleServiceError::NotFound
-            })?;
+            .await?;
 
         if article.user_id != user_id {
-            return Err(ArticleServiceError::Unauthorized);
+            return Err(DomainServiceError::Unauthorized);
         }
 
         Ok(())
