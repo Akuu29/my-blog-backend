@@ -1,6 +1,6 @@
-use crate::{
-    error::{ErrorCode, ErrorResponse},
-    model::api_response::ApiResponse,
+use crate::model::{
+    api_response::ApiResponse,
+    error_response::{ErrorCode, ErrorResponse},
 };
 use axum::{
     async_trait,
@@ -24,8 +24,6 @@ where
     #[tracing::instrument(name = "validated_json", skip(state))]
     async fn from_request(req: Request, state: &B) -> Result<Self, Self::Rejection> {
         let Json(val) = Json::<T>::from_request(req, state).await.map_err(|e| {
-            tracing::error!(error.kind="Validation", error.message=%e.to_string());
-
             let res_body =
                 ErrorResponse::new(ErrorCode::InvalidInput, format!("Json parse error: {}", e));
             ApiResponse::new(
@@ -36,8 +34,6 @@ where
         })?;
 
         val.validate().map_err(|e| {
-            tracing::error!(error.kind="Validation", error.message=%e.to_string());
-
             let res_body = ErrorResponse::new(
                 ErrorCode::ValidationError,
                 format!("Validation error: {}", e).replace("\n", ", "),

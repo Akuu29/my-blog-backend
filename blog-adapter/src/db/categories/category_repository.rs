@@ -1,11 +1,13 @@
-use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::model::{
-    categories::{
-        category::{Category, NewCategory, UpdateCategory},
-        i_category_repository::{CategoryFilter, ICategoryRepository},
+use blog_domain::{
+    model::{
+        categories::{
+            category::{Category, NewCategory, UpdateCategory},
+            i_category_repository::{CategoryFilter, ICategoryRepository},
+        },
+        common::{item_count::ItemCount, pagination::Pagination},
     },
-    common::{item_count::ItemCount, pagination::Pagination},
+    model::error::RepositoryError,
 };
 use sqlx::query_builder::QueryBuilder;
 use uuid::Uuid;
@@ -56,7 +58,7 @@ impl CategoryRepository {
 
 #[async_trait]
 impl ICategoryRepository for CategoryRepository {
-    async fn find(&self, category_id: Uuid) -> anyhow::Result<Category> {
+    async fn find(&self, category_id: Uuid) -> Result<Category, RepositoryError> {
         let category = sqlx::query_as::<_, Category>(
             r#"
             SELECT
@@ -74,14 +76,18 @@ impl ICategoryRepository for CategoryRepository {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| match e {
-            sqlx::Error::RowNotFound => RepositoryError::NotFound.into(),
-            e => anyhow::anyhow!(e),
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(category)
     }
 
-    async fn create(&self, user_id: Uuid, payload: NewCategory) -> anyhow::Result<Category> {
+    async fn create(
+        &self,
+        user_id: Uuid,
+        payload: NewCategory,
+    ) -> Result<Category, RepositoryError> {
         let category = sqlx::query_as::<_, Category>(
             r#"
             INSERT INTO categories (
@@ -101,7 +107,8 @@ impl ICategoryRepository for CategoryRepository {
         .bind(payload.name)
         .bind(user_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(category)
     }
@@ -110,7 +117,7 @@ impl ICategoryRepository for CategoryRepository {
         &self,
         category_filter: CategoryFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Category>, ItemCount)> {
+    ) -> Result<(Vec<Category>, ItemCount), RepositoryError> {
         // find categories
         let mut qb = QueryBuilder::new(
             r#"
@@ -139,7 +146,8 @@ impl ICategoryRepository for CategoryRepository {
             >("SELECT created_at FROM categories WHERE id = $1")
             .bind(cursor)
             .fetch_optional(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
             let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
@@ -165,7 +173,8 @@ impl ICategoryRepository for CategoryRepository {
         let categories = qb
             .build_query_as::<Category>()
             .fetch_all(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // count total categories
         let mut qb = QueryBuilder::new(
@@ -180,12 +189,17 @@ impl ICategoryRepository for CategoryRepository {
         let total = qb
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok((categories, total))
     }
 
-    async fn update(&self, category_id: Uuid, payload: UpdateCategory) -> anyhow::Result<Category> {
+    async fn update(
+        &self,
+        category_id: Uuid,
+        payload: UpdateCategory,
+    ) -> Result<Category, RepositoryError> {
         let category = sqlx::query_as::<_, Category>(
             r#"
             UPDATE categories
@@ -204,12 +218,13 @@ impl ICategoryRepository for CategoryRepository {
         .bind(payload.name)
         .bind(category_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(category)
     }
 
-    async fn delete(&self, category_id: Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, category_id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
             DELETE FROM categories
@@ -222,7 +237,7 @@ impl ICategoryRepository for CategoryRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())
