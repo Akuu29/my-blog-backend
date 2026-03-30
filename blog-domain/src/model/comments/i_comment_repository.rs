@@ -1,6 +1,7 @@
 use crate::model::{
     comments::comment::{Comment, NewComment, UpdateComment},
     common::{item_count::ItemCount, pagination::Pagination},
+    error::RepositoryError,
 };
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -22,17 +23,21 @@ pub trait ICommentRepository: Clone + std::marker::Send + std::marker::Sync + 's
         user_id: Option<Uuid>,
         user_name: String,
         payload: NewComment,
-    ) -> anyhow::Result<Comment>;
+    ) -> Result<Comment, RepositoryError>;
     async fn find(
         &self,
         comment_id: Uuid,
         comment_filter: CommentFilter,
-    ) -> anyhow::Result<Comment>;
+    ) -> Result<Comment, RepositoryError>;
     async fn all(
         &self,
         comment_filter: CommentFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Comment>, ItemCount)>;
-    async fn update(&self, comment_id: Uuid, payload: UpdateComment) -> anyhow::Result<Comment>;
-    async fn delete(&self, comment_id: Uuid) -> anyhow::Result<()>;
+    ) -> Result<(Vec<Comment>, ItemCount), RepositoryError>;
+    async fn update(
+        &self,
+        comment_id: Uuid,
+        payload: UpdateComment,
+    ) -> Result<Comment, RepositoryError>;
+    async fn delete(&self, comment_id: Uuid) -> Result<(), RepositoryError>;
 }

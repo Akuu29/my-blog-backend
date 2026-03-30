@@ -1,5 +1,6 @@
 pub mod api_response;
 pub mod auth_token;
+pub mod error_response;
 pub mod paged_body;
 pub mod paged_filter_query_param;
 pub mod validated_image;

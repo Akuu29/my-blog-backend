@@ -1,6 +1,7 @@
 use crate::model::{
     categories::category::{Category, NewCategory, UpdateCategory},
     common::{item_count::ItemCount, pagination::Pagination},
+    error::RepositoryError,
 };
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -17,13 +18,21 @@ pub struct CategoryFilter {
 
 #[async_trait]
 pub trait ICategoryRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
-    async fn create(&self, user_id: Uuid, payload: NewCategory) -> anyhow::Result<Category>;
-    async fn find(&self, category_id: Uuid) -> anyhow::Result<Category>;
+    async fn create(
+        &self,
+        user_id: Uuid,
+        payload: NewCategory,
+    ) -> Result<Category, RepositoryError>;
+    async fn find(&self, category_id: Uuid) -> Result<Category, RepositoryError>;
     async fn all(
         &self,
         category_filter: CategoryFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Category>, ItemCount)>;
-    async fn update(&self, category_id: Uuid, payload: UpdateCategory) -> anyhow::Result<Category>;
-    async fn delete(&self, category_id: Uuid) -> anyhow::Result<()>;
+    ) -> Result<(Vec<Category>, ItemCount), RepositoryError>;
+    async fn update(
+        &self,
+        category_id: Uuid,
+        payload: UpdateCategory,
+    ) -> Result<Category, RepositoryError>;
+    async fn delete(&self, category_id: Uuid) -> Result<(), RepositoryError>;
 }

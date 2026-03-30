@@ -1,5 +1,4 @@
-use super::ImageUsecaseError;
-use crate::config::ImageConfig;
+use crate::{config::ImageConfig, service::error::UsecaseError};
 use blog_domain::{
     model::images::{
         i_image_repository::{IImageRepository, ImageFilter},
@@ -45,18 +44,8 @@ where
         }
     }
 
-    pub async fn create(&self, new_image: NewImage) -> Result<ImageDataProps, ImageUsecaseError> {
-        let mut image = self
-            .repository
-            .create(new_image)
-            .await
-            .map_err(|e| {
-                if e.to_string() == "NotFound" {
-                    ImageUsecaseError::NotFound
-                } else {
-                    ImageUsecaseError::RepositoryError(e.to_string())
-                }
-            })?;
+    pub async fn create(&self, new_image: NewImage) -> Result<ImageDataProps, UsecaseError> {
+        let mut image = self.repository.create(new_image).await?;
         let image_url = match image.storage_type.to_string().as_str() {
             "database" => {
                 format!(
@@ -72,18 +61,8 @@ where
         Ok(image)
     }
 
-    pub async fn all(&self, filter: ImageFilter) -> Result<Vec<ImageDataProps>, ImageUsecaseError> {
-        let mut images = self
-            .repository
-            .all(filter)
-            .await
-            .map_err(|e| {
-                if e.to_string() == "NotFound" {
-                    ImageUsecaseError::NotFound
-                } else {
-                    ImageUsecaseError::RepositoryError(e.to_string())
-                }
-            })?;
+    pub async fn all(&self, filter: ImageFilter) -> Result<Vec<ImageDataProps>, UsecaseError> {
+        let mut images = self.repository.all(filter).await?;
 
         for image in images.iter_mut() {
             let image_url = match image.storage_type.to_string().as_str() {
@@ -102,39 +81,21 @@ where
         Ok(images)
     }
 
-    pub async fn find_data(&self, image_id: Uuid) -> Result<ImageData, ImageUsecaseError> {
-        self.repository
-            .find_data(image_id)
-            .await
-            .map_err(|e| {
-                if e.to_string() == "NotFound" {
-                    ImageUsecaseError::NotFound
-                } else {
-                    ImageUsecaseError::RepositoryError(e.to_string())
-                }
-            })
+    pub async fn find_data(&self, image_id: Uuid) -> Result<ImageData, UsecaseError> {
+        Ok(self.repository.find_data(image_id).await?)
     }
 
     pub async fn delete_with_auth(
         &self,
         image_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(), ImageUsecaseError> {
+    ) -> Result<(), UsecaseError> {
         // Verify image ownership
         self.image_service
             .verify_ownership(image_id, user_id)
             .await?;
 
-        self.repository
-            .delete(image_id)
-            .await
-            .map_err(|e| {
-                if e.to_string() == "NotFound" {
-                    ImageUsecaseError::NotFound
-                } else {
-                    ImageUsecaseError::RepositoryError(e.to_string())
-                }
-            })?;
+        self.repository.delete(image_id).await?;
 
         Ok(())
     }
