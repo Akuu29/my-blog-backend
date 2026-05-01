@@ -1,5 +1,5 @@
-use super::TagServiceError;
 use crate::model::tags::i_tag_repository::ITagRepository;
+use crate::service::error::DomainServiceError;
 use uuid::Uuid;
 
 pub struct TagService<T>
@@ -22,14 +22,11 @@ where
         &self,
         tag_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(), TagServiceError> {
-        let tag = self.repository.find(tag_id).await.map_err(|_| {
-            // TODO Propagation of repository errors.
-            TagServiceError::NotFound
-        })?;
+    ) -> Result<(), DomainServiceError> {
+        let tag = self.repository.find(tag_id).await?;
 
         if tag.user_id != user_id {
-            return Err(TagServiceError::Unauthorized);
+            return Err(DomainServiceError::Unauthorized);
         }
 
         Ok(())

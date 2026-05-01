@@ -1,3 +1,4 @@
+use crate::query_service::error::QueryServiceError;
 use async_trait::async_trait;
 use blog_domain::model::{
     articles::article::{Article, ArticleStatus},
@@ -24,5 +25,5 @@ pub trait IArticlesByTagQueryService:
         &self,
         filter: ArticlesByTagFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Article>, ItemCount)>;
+    ) -> Result<(Vec<Article>, ItemCount), QueryServiceError>;
 }

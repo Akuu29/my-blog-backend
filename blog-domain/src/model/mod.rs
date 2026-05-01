@@ -2,6 +2,7 @@ pub mod articles;
 pub mod categories;
 pub mod comments;
 pub mod common;
+pub mod error;
 pub mod images;
 pub mod tags;
 pub mod tokens;

@@ -15,7 +15,6 @@ The codebase follows hexagonal architecture (ports and adapters) with clear sepa
 1. **blog-domain** - Core domain layer
    - Contains domain models and business entities (articles, users, comments, tags, categories, images, tokens)
    - Defines repository interfaces (traits) that adapters must implement
-   - No external dependencies except serialization and validation
    - Models include: User, Article, Comment, Tag, Category, Image, Token
 
 2. **blog-app** - Application/Use Case layer

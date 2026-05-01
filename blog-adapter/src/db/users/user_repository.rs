@@ -1,11 +1,13 @@
-use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::model::{
-    common::{item_count::ItemCount, pagination::Pagination},
-    users::{
-        i_user_repository::{IUserRepository, UserFilter},
-        user::{NewUser, UpdateUser, User},
+use blog_domain::{
+    model::{
+        common::{item_count::ItemCount, pagination::Pagination},
+        users::{
+            i_user_repository::{IUserRepository, UserFilter},
+            user::{NewUser, UpdateUser, User},
+        },
     },
+    model::error::RepositoryError,
 };
 use sqlx::{QueryBuilder, types::Uuid};
 
@@ -47,8 +49,12 @@ impl UserRepository {
 
 #[async_trait]
 impl IUserRepository for UserRepository {
-    async fn create(&self, payload: NewUser) -> anyhow::Result<User> {
-        let mut tx = self.pool.begin().await?;
+    async fn create(&self, payload: NewUser) -> Result<User, RepositoryError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         let user = sqlx::query_as::<_, User>(
             r#"
@@ -60,7 +66,8 @@ impl IUserRepository for UserRepository {
         .bind(payload.name)
         .bind(payload.role)
         .fetch_one(&mut *tx)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         sqlx::query(
             r#"
@@ -95,9 +102,12 @@ impl IUserRepository for UserRepository {
         .bind(payload.identity.provider_email_hash.0)
         .bind(payload.identity.is_primary)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
-        tx.commit().await?;
+        tx.commit()
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
         Ok(user)
     }
 
@@ -105,7 +115,7 @@ impl IUserRepository for UserRepository {
         &self,
         user_filter: UserFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<User>, ItemCount)> {
+    ) -> Result<(Vec<User>, ItemCount), RepositoryError> {
         // find users
         let mut qb = QueryBuilder::new(
             r#"
@@ -137,7 +147,8 @@ impl IUserRepository for UserRepository {
             >("SELECT created_at FROM users WHERE id = $1")
             .bind(cursor)
             .fetch_optional(&self.pool)
-            .await?
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?
             .ok_or(RepositoryError::NotFound)?;
 
             if has_condition {
@@ -160,7 +171,11 @@ impl IUserRepository for UserRepository {
 
         qb.push(" LIMIT ").push_bind(pagination.per_page);
 
-        let users = qb.build_query_as::<User>().fetch_all(&self.pool).await?;
+        let users = qb
+            .build_query_as::<User>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // count total users
         let mut qb = QueryBuilder::new(
@@ -174,12 +189,13 @@ impl IUserRepository for UserRepository {
         let total = qb
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok((users, total))
     }
 
-    async fn find(&self, user_id: Uuid) -> anyhow::Result<User> {
+    async fn find(&self, user_id: Uuid) -> Result<User, RepositoryError> {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT
@@ -196,7 +212,11 @@ impl IUserRepository for UserRepository {
         )
         .bind(user_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            e => RepositoryError::Unknown(Box::new(e)),
+        })?;
 
         Ok(user)
     }
@@ -205,7 +225,7 @@ impl IUserRepository for UserRepository {
         &self,
         provider_name: &str,
         idp_sub: &str,
-    ) -> anyhow::Result<User> {
+    ) -> Result<User, RepositoryError> {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT
@@ -229,13 +249,13 @@ impl IUserRepository for UserRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(user)
     }
 
-    async fn update(&self, user_id: Uuid, payload: UpdateUser) -> anyhow::Result<User> {
+    async fn update(&self, user_id: Uuid, payload: UpdateUser) -> Result<User, RepositoryError> {
         let pre_user = self.find(user_id).await?;
         let user = sqlx::query_as::<_, User>(
             r#"
@@ -247,12 +267,13 @@ impl IUserRepository for UserRepository {
         .bind(payload.name.unwrap_or(pre_user.name))
         .bind(user_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(user)
     }
 
-    async fn delete(&self, user_id: Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, user_id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
             DELETE FROM users
@@ -264,7 +285,7 @@ impl IUserRepository for UserRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())

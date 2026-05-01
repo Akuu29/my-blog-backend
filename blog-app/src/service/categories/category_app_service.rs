@@ -1,4 +1,4 @@
-use super::CategoryUsecaseError;
+use crate::service::error::UsecaseError;
 use blog_domain::model::categories::i_category_repository::CategoryFilter;
 use blog_domain::{
     model::{
@@ -26,16 +26,20 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
         }
     }
 
-    pub async fn create(&self, user_id: Uuid, payload: NewCategory) -> anyhow::Result<Category> {
-        self.repository.create(user_id, payload).await
+    pub async fn create(
+        &self,
+        user_id: Uuid,
+        payload: NewCategory,
+    ) -> Result<Category, UsecaseError> {
+        Ok(self.repository.create(user_id, payload).await?)
     }
 
     pub async fn all(
         &self,
         category_filter: CategoryFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Category>, ItemCount)> {
-        self.repository.all(category_filter, pagination).await
+    ) -> Result<(Vec<Category>, ItemCount), UsecaseError> {
+        Ok(self.repository.all(category_filter, pagination).await?)
     }
 
     pub async fn update_with_auth(
@@ -43,31 +47,27 @@ impl<T: ICategoryRepository> CategoryAppService<T> {
         user_id: Uuid,
         category_id: Uuid,
         payload: UpdateCategory,
-    ) -> Result<Category, CategoryUsecaseError> {
+    ) -> Result<Category, UsecaseError> {
         // Verify category ownership
         self.category_service
             .verify_ownership(category_id, user_id)
             .await?;
 
-        self.repository
-            .update(category_id, payload)
-            .await
-            .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))
+        Ok(self.repository.update(category_id, payload).await?)
     }
 
     pub async fn delete_with_auth(
         &self,
         user_id: Uuid,
         category_id: Uuid,
-    ) -> Result<(), CategoryUsecaseError> {
+    ) -> Result<(), UsecaseError> {
         // Verify category ownership
         self.category_service
             .verify_ownership(category_id, user_id)
             .await?;
 
-        self.repository
-            .delete(category_id)
-            .await
-            .map_err(|e| CategoryUsecaseError::RepositoryError(e.to_string()))
+        self.repository.delete(category_id).await?;
+
+        Ok(())
     }
 }

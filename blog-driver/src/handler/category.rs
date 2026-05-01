@@ -42,12 +42,12 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let category = category_app_service
         .create(access_token_data.claims.sub(), payload)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::CREATED,
@@ -71,7 +71,7 @@ where
     let (mut categories, total) = category_app_service
         .all(param.filter, pagination.clone())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let has_next = categories.len() == pagination.per_page as usize;
     if has_next {
@@ -108,14 +108,14 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let user_id = access_token_data.claims.sub();
 
     let category = category_app_service
         .update_with_auth(user_id, category_id, payload)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -141,14 +141,14 @@ where
     let access_token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let user_id = access_token_data.claims.sub();
 
     category_app_service
         .delete_with_auth(user_id, category_id)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }

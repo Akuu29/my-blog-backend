@@ -1,5 +1,5 @@
-use super::CommentServiceError;
 use crate::model::comments::i_comment_repository::{CommentFilter, ICommentRepository};
+use crate::service::error::DomainServiceError;
 use uuid::Uuid;
 
 pub struct CommentService<T>
@@ -22,15 +22,14 @@ where
         &self,
         comment_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(), CommentServiceError> {
+    ) -> Result<(), DomainServiceError> {
         let comment = self
             .repository
             .find(comment_id, CommentFilter::default())
-            .await
-            .map_err(|e| CommentServiceError::InternalError(e.to_string()))?;
+            .await?;
 
         if comment.user_id != Some(user_id) {
-            return Err(CommentServiceError::Unauthorized);
+            return Err(DomainServiceError::Unauthorized);
         }
 
         Ok(())

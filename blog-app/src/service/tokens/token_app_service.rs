@@ -31,21 +31,29 @@ impl<T: ITokenRepository> TokenAppService<T> {
         &self,
         token: IdTokenString,
     ) -> Result<TokenData<IdTokenClaims>, TokenServiceError> {
-        let jwks = self.repository.fetch_jwks().await
-            .map_err(|e| TokenServiceError::RepositoryError(e.to_string()))?;
+        let jwks = self
+            .repository
+            .fetch_jwks()
+            .await
+            .map_err(|e| TokenServiceError::Unknown(anyhow::anyhow!(e)))?;
 
         let token_header = jsonwebtoken::decode_header(token.str())?;
 
-        let kid = token_header.kid
+        let kid = token_header
+            .kid
             .ok_or_else(|| TokenServiceError::InvalidToken)?;
-        let pem = jwks.get(&kid)
+        let pem = jwks
+            .get(&kid)
             .ok_or_else(|| TokenServiceError::InvalidToken)?;
         let decoding_key = DecodingKey::from_rsa_pem(pem.as_bytes())?;
 
         let validation = {
             let mut validation = Validation::new(Algorithm::RS256);
             validation.set_audience(&[self.firebase_project_id.clone()]);
-            let issuer = format!("https://securetoken.google.com/{}", self.firebase_project_id);
+            let issuer = format!(
+                "https://securetoken.google.com/{}",
+                self.firebase_project_id
+            );
             validation.set_issuer(&[issuer]);
             validation
         };

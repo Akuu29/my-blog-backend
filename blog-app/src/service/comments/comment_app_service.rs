@@ -1,4 +1,4 @@
-use super::CommentUsecaseError;
+use crate::service::error::UsecaseError;
 use blog_domain::{
     model::{
         comments::{
@@ -50,29 +50,23 @@ where
         user_id: Option<Uuid>,
         user_name: String,
         payload: NewComment,
-    ) -> Result<Comment, CommentUsecaseError> {
-        self.repository
-            .create(user_id, user_name, payload)
-            .await
-            .map_err(|e| CommentUsecaseError::RepositoryError(e.to_string()))
+    ) -> Result<Comment, UsecaseError> {
+        Ok(self.repository.create(user_id, user_name, payload).await?)
     }
 
-    pub async fn find(&self, comment_id: Uuid) -> Result<Comment, CommentUsecaseError> {
-        self.repository
+    pub async fn find(&self, comment_id: Uuid) -> Result<Comment, UsecaseError> {
+        Ok(self
+            .repository
             .find(comment_id, CommentFilter::default())
-            .await
-            .map_err(|e| CommentUsecaseError::RepositoryError(e.to_string()))
+            .await?)
     }
 
     pub async fn all(
         &self,
         filter: CommentFilter,
         pagination: Pagination,
-    ) -> Result<(Vec<Comment>, ItemCount), CommentUsecaseError> {
-        self.repository
-            .all(filter, pagination)
-            .await
-            .map_err(|e| CommentUsecaseError::RepositoryError(e.to_string()))
+    ) -> Result<(Vec<Comment>, ItemCount), UsecaseError> {
+        Ok(self.repository.all(filter, pagination).await?)
     }
 
     pub async fn update_with_auth(
@@ -80,32 +74,26 @@ where
         comment_id: Uuid,
         user_id: Uuid,
         payload: UpdateComment,
-    ) -> Result<Comment, CommentUsecaseError> {
+    ) -> Result<Comment, UsecaseError> {
         // Verify ownership using domain service
         self.comment_service
             .verify_ownership(comment_id, user_id)
             .await?;
 
-        self.repository
-            .update(comment_id, payload)
-            .await
-            .map_err(|e| CommentUsecaseError::RepositoryError(e.to_string()))
+        Ok(self.repository.update(comment_id, payload).await?)
     }
 
     pub async fn delete_with_auth(
         &self,
         comment_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(), CommentUsecaseError> {
+    ) -> Result<(), UsecaseError> {
         // Verify ownership using domain service
         self.comment_service
             .verify_ownership(comment_id, user_id)
             .await?;
 
-        self.repository
-            .delete(comment_id)
-            .await
-            .map_err(|e| CommentUsecaseError::RepositoryError(e.to_string()))?;
+        self.repository.delete(comment_id).await?;
 
         Ok(())
     }

@@ -1,5 +1,8 @@
 use async_trait::async_trait;
-use blog_app::query_service::tags_attached_article::i_tags_attached_article_query_service::ITagsAttachedArticleQueryService;
+use blog_app::query_service::{
+    error::QueryServiceError,
+    tags_attached_article::i_tags_attached_article_query_service::ITagsAttachedArticleQueryService,
+};
 use blog_domain::model::tags::tag::Tag;
 use uuid::Uuid;
 
@@ -16,7 +19,10 @@ impl TagsAttachedArticleQueryService {
 
 #[async_trait]
 impl ITagsAttachedArticleQueryService for TagsAttachedArticleQueryService {
-    async fn find_tags_by_article_id(&self, article_id: Uuid) -> anyhow::Result<Vec<Tag>> {
+    async fn find_tags_by_article_id(
+        &self,
+        article_id: Uuid,
+    ) -> Result<Vec<Tag>, QueryServiceError> {
         let tags = sqlx::query_as::<_, Tag>(
             r#"
             SELECT
@@ -32,7 +38,8 @@ impl ITagsAttachedArticleQueryService for TagsAttachedArticleQueryService {
         )
         .bind(article_id)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| QueryServiceError::Unknown(Box::new(e)))?;
 
         Ok(tags)
     }

@@ -1,5 +1,6 @@
 use crate::model::{
     common::{item_count::ItemCount, pagination::Pagination},
+    error::RepositoryError,
     tags::tag::{NewTag, Tag},
 };
 use async_trait::async_trait;
@@ -22,12 +23,12 @@ impl TagFilter {
 
 #[async_trait]
 pub trait ITagRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
-    async fn create(&self, user_id: Uuid, payload: NewTag) -> anyhow::Result<Tag>;
-    async fn find(&self, tag_id: Uuid) -> anyhow::Result<Tag>;
+    async fn create(&self, user_id: Uuid, payload: NewTag) -> Result<Tag, RepositoryError>;
+    async fn find(&self, tag_id: Uuid) -> Result<Tag, RepositoryError>;
     async fn all(
         &self,
         tag_filter: TagFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Tag>, ItemCount)>;
-    async fn delete(&self, tag_id: Uuid) -> anyhow::Result<()>;
+    ) -> Result<(Vec<Tag>, ItemCount), RepositoryError>;
+    async fn delete(&self, tag_id: Uuid) -> Result<(), RepositoryError>;
 }

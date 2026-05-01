@@ -1,11 +1,13 @@
-use crate::utils::repository_error::RepositoryError;
 use async_trait::async_trait;
-use blog_domain::model::{
-    comments::{
-        comment::{Comment, NewComment, UpdateComment},
-        i_comment_repository::{CommentFilter, ICommentRepository},
+use blog_domain::{
+    model::{
+        comments::{
+            comment::{Comment, NewComment, UpdateComment},
+            i_comment_repository::{CommentFilter, ICommentRepository},
+        },
+        common::{item_count::ItemCount, pagination::Pagination},
     },
-    common::{item_count::ItemCount, pagination::Pagination},
+    model::error::RepositoryError,
 };
 use sqlx::QueryBuilder;
 use uuid::Uuid;
@@ -66,7 +68,7 @@ impl ICommentRepository for CommentRepository {
         user_id: Option<Uuid>,
         user_name: String,
         payload: NewComment,
-    ) -> anyhow::Result<Comment> {
+    ) -> Result<Comment, RepositoryError> {
         let comment = sqlx::query_as::<_, Comment>(
             r#"
             INSERT INTO comments (article_id, body, user_id, user_name)
@@ -79,7 +81,8 @@ impl ICommentRepository for CommentRepository {
         .bind(user_id)
         .bind(user_name)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(comment)
     }
@@ -88,7 +91,7 @@ impl ICommentRepository for CommentRepository {
         &self,
         comment_id: Uuid,
         comment_filter: CommentFilter,
-    ) -> anyhow::Result<Comment> {
+    ) -> Result<Comment, RepositoryError> {
         let mut qb = QueryBuilder::new(
             r#"
             SELECT
@@ -130,7 +133,7 @@ impl ICommentRepository for CommentRepository {
             .await
             .map_err(|e| match e {
                 sqlx::Error::RowNotFound => RepositoryError::NotFound,
-                e => RepositoryError::Unexpected(e.to_string()),
+                e => RepositoryError::Unknown(Box::new(e)),
             })?;
 
         Ok(comment)
@@ -140,7 +143,7 @@ impl ICommentRepository for CommentRepository {
         &self,
         comment_filter: CommentFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Comment>, ItemCount)> {
+    ) -> Result<(Vec<Comment>, ItemCount), RepositoryError> {
         // Find comments with pagination
         let mut qb = QueryBuilder::new(
             r#"
@@ -162,11 +165,14 @@ impl ICommentRepository for CommentRepository {
 
         // Handle cursor-based pagination
         if let Some(cursor) = pagination.cursor {
-            let cursor_ts_option =
-                sqlx::query_scalar::<_, sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>>("SELECT created_at FROM comments WHERE id = $1")
-                    .bind(cursor)
-                    .fetch_optional(&self.pool)
-                    .await?;
+            let cursor_ts_option = sqlx::query_scalar::<
+                _,
+                sqlx::types::chrono::DateTime<sqlx::types::chrono::Local>,
+            >("SELECT created_at FROM comments WHERE id = $1")
+            .bind(cursor)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
             let cursor_ts = cursor_ts_option.ok_or(RepositoryError::NotFound)?;
             if has_condition {
@@ -174,7 +180,11 @@ impl ICommentRepository for CommentRepository {
             } else {
                 qb.push(" WHERE ");
             }
-            qb.push("(c.created_at, c.id) < (").push_bind(cursor_ts).push(", ").push_bind(cursor).push(")");
+            qb.push("(c.created_at, c.id) < (")
+                .push_bind(cursor_ts)
+                .push(", ")
+                .push_bind(cursor)
+                .push(")");
         }
 
         qb.push(" ORDER BY c.created_at DESC, c.id DESC");
@@ -185,7 +195,11 @@ impl ICommentRepository for CommentRepository {
 
         qb.push(" LIMIT ").push_bind(pagination.per_page);
 
-        let comments = qb.build_query_as::<Comment>().fetch_all(&self.pool).await?;
+        let comments = qb
+            .build_query_as::<Comment>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         // Count total comments
         let mut qb = QueryBuilder::new(
@@ -201,12 +215,17 @@ impl ICommentRepository for CommentRepository {
         let total = qb
             .build_query_as::<ItemCount>()
             .fetch_one(&self.pool)
-            .await?;
+            .await
+            .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok((comments, total))
     }
 
-    async fn update(&self, comment_id: Uuid, payload: UpdateComment) -> anyhow::Result<Comment> {
+    async fn update(
+        &self,
+        comment_id: Uuid,
+        payload: UpdateComment,
+    ) -> Result<Comment, RepositoryError> {
         let pre_comment = self.find(comment_id, CommentFilter::default()).await?;
         let comment = sqlx::query_as::<_, Comment>(
             r#"
@@ -230,12 +249,13 @@ impl ICommentRepository for CommentRepository {
         .bind(payload.body.unwrap_or(pre_comment.body))
         .bind(comment_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
 
         Ok(comment)
     }
 
-    async fn delete(&self, comment_id: Uuid) -> anyhow::Result<()> {
+    async fn delete(&self, comment_id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
             DELETE FROM comments
@@ -248,7 +268,7 @@ impl ICommentRepository for CommentRepository {
         .await
         .map_err(|e| match e {
             sqlx::Error::RowNotFound => RepositoryError::NotFound,
-            e => RepositoryError::Unexpected(e.to_string()),
+            e => RepositoryError::Unknown(Box::new(e)),
         })?;
 
         Ok(())
@@ -352,11 +372,7 @@ mod test {
     }
 
     impl TestCommentGuard {
-        fn new(
-            pool: &PgPool,
-            repository: &CommentRepository,
-            article_id: Option<Uuid>,
-        ) -> Self {
+        fn new(pool: &PgPool, repository: &CommentRepository, article_id: Option<Uuid>) -> Self {
             Self {
                 pool: pool.clone(),
                 repository: repository.clone(),
@@ -460,13 +476,8 @@ mod test {
         let (pool, repository, user_id, article_id) = setup().await;
         let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
-        let comment = create_test_comment(
-            &repository,
-            article_id,
-            user_id,
-            "test find comment",
-        )
-        .await;
+        let comment =
+            create_test_comment(&repository, article_id, user_id, "test find comment").await;
         guard.track(comment.id);
 
         let found_comment = repository
@@ -485,21 +496,14 @@ mod test {
         let (pool, repository, user_id, article_id) = setup().await;
         let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
-        let comment1 =
-            create_test_comment(&repository, article_id, user_id, "comment 1").await;
+        let comment1 = create_test_comment(&repository, article_id, user_id, "comment 1").await;
         guard.track(comment1.id);
 
-        let comment2 =
-            create_test_comment(&repository, article_id, user_id, "comment 2").await;
+        let comment2 = create_test_comment(&repository, article_id, user_id, "comment 2").await;
         guard.track(comment2.id);
 
-        let comment3 = create_test_comment_guest(
-            &repository,
-            article_id,
-            "Guest User",
-            "guest comment",
-        )
-        .await;
+        let comment3 =
+            create_test_comment_guest(&repository, article_id, "Guest User", "guest comment").await;
         guard.track(comment3.id);
 
         let (comments, total) = repository
@@ -529,23 +533,14 @@ mod test {
         let (pool, repository, user_id, article_id) = setup().await;
         let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
-        let comment = create_test_comment(
-            &repository,
-            article_id,
-            user_id,
-            "original body",
-        )
-        .await;
+        let comment = create_test_comment(&repository, article_id, user_id, "original body").await;
         guard.track(comment.id);
 
         let update_payload = UpdateComment {
             body: Some("updated body".to_string()),
         };
 
-        let updated_comment = repository
-            .update(comment.id, update_payload)
-            .await
-            .unwrap();
+        let updated_comment = repository.update(comment.id, update_payload).await.unwrap();
 
         assert_eq!(updated_comment.id, comment.id);
         assert_eq!(updated_comment.body, "updated body");
@@ -557,15 +552,12 @@ mod test {
         let (pool, repository, user_id, article_id) = setup().await;
         let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
-        let comment =
-            create_test_comment(&repository, article_id, user_id, "to delete").await;
+        let comment = create_test_comment(&repository, article_id, user_id, "to delete").await;
         guard.track(comment.id);
 
         repository.delete(comment.id).await.unwrap();
 
-        let result = repository
-            .find(comment.id, CommentFilter::default())
-            .await;
+        let result = repository.find(comment.id, CommentFilter::default()).await;
         assert!(result.is_err());
     }
 
@@ -575,13 +567,8 @@ mod test {
         let (pool, repository, user_id, article_id) = setup().await;
         let mut guard = TestCommentGuard::new(&pool, &repository, Some(article_id));
 
-        let comment = create_test_comment(
-            &repository,
-            article_id,
-            user_id,
-            "comment with filter",
-        )
-        .await;
+        let comment =
+            create_test_comment(&repository, article_id, user_id, "comment with filter").await;
         guard.track(comment.id);
 
         // Test with user_id filter

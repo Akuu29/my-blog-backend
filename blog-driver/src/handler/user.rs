@@ -14,8 +14,8 @@ use axum::{
 };
 use axum_extra::extract::cookie::PrivateCookieJar;
 use blog_app::service::{
-    tokens::token_app_service::TokenAppService,
-    users::{UserUsecaseError, user_app_service::UserAppService},
+    error::UsecaseError, tokens::token_app_service::TokenAppService,
+    users::user_app_service::UserAppService,
 };
 use blog_domain::{
     config::EmailConfig,
@@ -32,6 +32,7 @@ use blog_domain::{
             user::{NewUser, UpdateUser},
         },
     },
+    service::error::DomainServiceError,
 };
 use sqlx::types::Uuid;
 use std::{sync::Arc, time};
@@ -64,25 +65,28 @@ where
     let id_token_data = token_app_service
         .verify_id_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let id_token_claims = id_token_data.claims;
 
     let provider_name = id_token_claims
         .provider_name()
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
     let exists_user = user_app_service
         .find_by_user_identity(&provider_name, &id_token_claims.sub())
         .await;
 
     let response = match exists_user {
-        Ok(_) => Err(AppError::Unexpected("User already exists".to_string())),
+        // TODO The driver layer is directly generating use case errors. This represents a leakage of responsibilities from the app layer.
+        Ok(_) => Err(AppError::from(UsecaseError::DomainError(
+            DomainServiceError::Conflict,
+        ))),
         Err(e) => match &e {
-            UserUsecaseError::RepositoryError(_) => {
+            UsecaseError::DomainError(DomainServiceError::NotFound) => {
                 let email = id_token_claims.email();
                 let email_cipher =
                     EmailCipher::from_plaintext(&email, &email_config.encryption_key)
-                        .map_err(|e| AppError::Unexpected(e.to_string()))?;
+                        .map_err(AppError::from)?;
                 let email_hash = EmailHash::from_plaintext(&email, &email_config.pepper);
 
                 let new_user = NewUser::new(
@@ -95,15 +99,15 @@ where
                 let user = user_app_service
                     .create(new_user)
                     .await
-                    .map_err(|e| AppError::from(e))?;
+                    .map_err(AppError::from)?;
 
                 let access_token = token_app_service
                     .generate_access_token(&user)
-                    .map_err(|e| AppError::from(e))?;
+                    .map_err(AppError::from)?;
 
                 let refresh_token = token_app_service
                     .generate_refresh_token(&user)
-                    .map_err(|e| AppError::from(e))?;
+                    .map_err(AppError::from)?;
                 let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
                 let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
 
@@ -148,13 +152,13 @@ where
     let id_token_data = token_app_service
         .verify_id_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let id_token_claims = id_token_data.claims;
 
     let provider_name = id_token_claims
         .provider_name()
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let exists_user = user_app_service
         .find_by_user_identity(&provider_name, &id_token_claims.sub())
@@ -164,11 +168,11 @@ where
         Ok(user) => {
             let access_token = token_app_service
                 .generate_access_token(&user)
-                .map_err(|e| AppError::from(e))?;
+                .map_err(AppError::from)?;
 
             let refresh_token = token_app_service
                 .generate_refresh_token(&user)
-                .map_err(|e| AppError::from(e))?;
+                .map_err(AppError::from)?;
             let url_encoded_refresh_token = urlencoding::encode(&refresh_token).into_owned();
             let updated_jar = cookie_service.set_refresh_token(jar, &url_encoded_refresh_token);
 
@@ -206,7 +210,7 @@ where
     let (mut users, total) = user_app_service
         .all(param.filter, pagination.clone())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let has_next = users.len() == pagination.per_page as usize;
     if has_next {
@@ -234,7 +238,7 @@ where
     let user = user_app_service
         .find(user_id)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -258,12 +262,12 @@ where
     let token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let user = user_app_service
         .update_with_auth(user_id, token_data.claims.sub(), payload)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::new(
         StatusCode::OK,
@@ -286,13 +290,13 @@ where
     let token_data = token_app_service
         .verify_access_token(token)
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     // Use the new delete_with_auth method which includes authorization check
     user_app_service
         .delete_with_auth(user_id, token_data.claims.sub())
         .await
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     Ok(ApiResponse::<()>::new(StatusCode::OK, None, None))
 }

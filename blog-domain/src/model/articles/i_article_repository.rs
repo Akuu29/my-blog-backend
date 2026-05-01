@@ -1,6 +1,7 @@
 use crate::model::{
     articles::article::{Article, ArticleStatus, NewArticle, UpdateArticle},
     common::{item_count::ItemCount, pagination::Pagination},
+    error::RepositoryError,
 };
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -19,22 +20,30 @@ pub struct ArticleFilter {
 
 #[async_trait]
 pub trait IArticleRepository: Clone + std::marker::Send + std::marker::Sync + 'static {
-    async fn create(&self, user_id: Uuid, new_article: NewArticle) -> anyhow::Result<Article>;
+    async fn create(
+        &self,
+        user_id: Uuid,
+        new_article: NewArticle,
+    ) -> Result<Article, RepositoryError>;
     async fn find(
         &self,
         article_id: Uuid,
         article_filter: ArticleFilter,
-    ) -> anyhow::Result<Article>;
+    ) -> Result<Article, RepositoryError>;
     async fn all(
         &self,
         article_filter: ArticleFilter,
         pagination: Pagination,
-    ) -> anyhow::Result<(Vec<Article>, ItemCount)>;
+    ) -> Result<(Vec<Article>, ItemCount), RepositoryError>;
     async fn update(
         &self,
         article_id: Uuid,
         update_article: UpdateArticle,
-    ) -> anyhow::Result<Article>;
-    async fn delete(&self, article_id: Uuid) -> anyhow::Result<()>;
-    async fn attach_tags(&self, article_id: Uuid, tag_ids: Vec<Uuid>) -> anyhow::Result<()>;
+    ) -> Result<Article, RepositoryError>;
+    async fn delete(&self, article_id: Uuid) -> Result<(), RepositoryError>;
+    async fn attach_tags(
+        &self,
+        article_id: Uuid,
+        tag_ids: Vec<Uuid>,
+    ) -> Result<(), RepositoryError>;
 }

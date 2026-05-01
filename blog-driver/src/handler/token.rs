@@ -29,21 +29,21 @@ where
     T: ITokenRepository,
     U: IUserRepository,
 {
-    let refresh_token = cookie_service
-        .get_refresh_token(&jar)
-        .map_err(|e| AppError::from(e))?;
+    let refresh_token = cookie_service.get_refresh_token(&jar).map_err(|_| {
+        AppError::Token(blog_app::service::tokens::error::TokenServiceError::InvalidToken)
+    })?;
     let refresh_token = RefreshTokenString(refresh_token);
 
     let token_data = token_app_service
         .verify_refresh_token(refresh_token)
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     let exists_user = user_app_service.find(token_data.claims.sub()).await;
     match exists_user {
         Ok(user) => {
             let access_token = token_app_service
                 .generate_access_token(&user)
-                .map_err(|e| AppError::from(e))?;
+                .map_err(AppError::from)?;
             let api_credentials = ApiCredentials::new(&access_token, user);
 
             Ok(ApiResponse::new(
