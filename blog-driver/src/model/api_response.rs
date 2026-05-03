@@ -34,6 +34,12 @@ impl<T> ApiResponse<T> {
     }
 }
 
+impl ApiResponse<String> {
+    pub fn json(status: StatusCode, body: String, cookies: Option<PrivateCookieJar>) -> Self {
+        Self::new(status, Some(body), cookies).with_header("Content-Type", "application/json")
+    }
+}
+
 impl<T: Into<Body>> IntoResponse for ApiResponse<T> {
     fn into_response(self) -> Response {
         let mut response = if let Some(jar) = self.cookies {

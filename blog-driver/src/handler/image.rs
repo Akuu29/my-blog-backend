@@ -45,9 +45,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::CREATED,
-        Some(serde_json::to_string(&image).unwrap()),
+        serde_json::to_string(&image).unwrap(),
         None,
     ))
 }
@@ -65,9 +65,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&images).unwrap()),
+        serde_json::to_string(&images).unwrap(),
         None,
     ))
 }

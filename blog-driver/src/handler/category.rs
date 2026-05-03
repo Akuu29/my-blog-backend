@@ -49,9 +49,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::CREATED,
-        Some(serde_json::to_string(&category).unwrap()),
+        serde_json::to_string(&category).unwrap(),
         None,
     ))
 }
@@ -77,15 +77,12 @@ where
     if has_next {
         categories.pop();
     }
-    let next_cursor = categories
-        .last()
-        .map(|category| category.id)
-        .or(None);
+    let next_cursor = categories.last().map(|category| category.id).or(None);
     let paged_body = PagedBody::new(categories, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
+        serde_json::to_string(&paged_body).unwrap(),
         None,
     ))
 }
@@ -117,9 +114,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&category).unwrap()),
+        serde_json::to_string(&category).unwrap(),
         None,
     ))
 }

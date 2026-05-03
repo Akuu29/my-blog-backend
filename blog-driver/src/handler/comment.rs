@@ -65,9 +65,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::CREATED,
-        Some(serde_json::to_string(&comment).unwrap()),
+        serde_json::to_string(&comment).unwrap(),
         None,
     ))
 }
@@ -85,9 +85,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&comment).unwrap()),
+        serde_json::to_string(&comment).unwrap(),
         None,
     ))
 }
@@ -116,9 +116,9 @@ where
     let next_cursor = comments.last().map(|comment| comment.id).or(None);
     let paged_body = PagedBody::new(comments, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
+        serde_json::to_string(&paged_body).unwrap(),
         None,
     ))
 }
@@ -148,9 +148,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&comment).unwrap()),
+        serde_json::to_string(&comment).unwrap(),
         None,
     ))
 }

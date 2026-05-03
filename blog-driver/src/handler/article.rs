@@ -54,9 +54,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::CREATED,
-        Some(serde_json::to_string(&article).unwrap()),
+        serde_json::to_string(&article).unwrap(),
         None,
     ))
 }
@@ -75,9 +75,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&article).unwrap()),
+        serde_json::to_string(&article).unwrap(),
         None,
     ))
 }
@@ -107,9 +107,9 @@ where
     let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
+        serde_json::to_string(&paged_body).unwrap(),
         None,
     ))
 }
@@ -142,9 +142,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&article).unwrap()),
+        serde_json::to_string(&article).unwrap(),
         None,
     ))
 }
@@ -238,9 +238,9 @@ where
     let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
+        serde_json::to_string(&paged_body).unwrap(),
         None,
     ))
 }

@@ -69,9 +69,7 @@ where
 
     let id_token_claims = id_token_data.claims;
 
-    let provider_name = id_token_claims
-        .provider_name()
-        .map_err(AppError::from)?;
+    let provider_name = id_token_claims.provider_name().map_err(AppError::from)?;
     let exists_user = user_app_service
         .find_by_user_identity(&provider_name, &id_token_claims.sub())
         .await;
@@ -113,11 +111,12 @@ where
 
                 let api_credentials = ApiCredentials::new(&access_token, user);
 
-                Ok(ApiResponse::new(
+                Ok(ApiResponse::json(
                     StatusCode::OK,
-                    Some(serde_json::to_string(&api_credentials).unwrap()),
+                    serde_json::to_string(&api_credentials).unwrap(),
                     Some(updated_jar),
-                ))
+                )
+                .with_header("Cache-Control", "no-store"))
             }
             _ => Err(AppError::from(e)),
         },
@@ -156,9 +155,7 @@ where
 
     let id_token_claims = id_token_data.claims;
 
-    let provider_name = id_token_claims
-        .provider_name()
-        .map_err(AppError::from)?;
+    let provider_name = id_token_claims.provider_name().map_err(AppError::from)?;
 
     let exists_user = user_app_service
         .find_by_user_identity(&provider_name, &id_token_claims.sub())
@@ -178,11 +175,12 @@ where
 
             let api_credentials = ApiCredentials::new(&access_token, user);
 
-            Ok(ApiResponse::new(
+            Ok(ApiResponse::json(
                 StatusCode::OK,
-                Some(serde_json::to_string(&api_credentials).unwrap()),
+                serde_json::to_string(&api_credentials).unwrap(),
                 Some(updated_jar),
-            ))
+            )
+            .with_header("Cache-Control", "no-store"))
         }
         Err(e) => Err(AppError::from(e)),
     };
@@ -220,9 +218,9 @@ where
     let next_cursor = users.last().map(|user| user.id).or(None);
     let paged_body = PagedBody::new(users, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
+        serde_json::to_string(&paged_body).unwrap(),
         None,
     ))
 }
@@ -240,9 +238,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&user).unwrap()),
+        serde_json::to_string(&user).unwrap(),
         None,
     ))
 }
@@ -269,9 +267,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&user).unwrap()),
+        serde_json::to_string(&user).unwrap(),
         None,
     ))
 }

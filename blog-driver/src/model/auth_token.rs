@@ -1,4 +1,7 @@
-use crate::model::{api_response::ApiResponse, error_response::{ErrorCode, ErrorResponse}};
+use crate::model::{
+    api_response::ApiResponse,
+    error_response::{ErrorCode, ErrorResponse},
+};
 use axum::{
     async_trait,
     extract::FromRequestParts,
@@ -30,9 +33,9 @@ where
             _ => {
                 let err_msg = "No token provided";
                 let err_res_body = ErrorResponse::new(ErrorCode::Unauthorized, err_msg);
-                Err(ApiResponse::new(
+                Err(ApiResponse::json(
                     StatusCode::UNAUTHORIZED,
-                    Some(serde_json::to_string(&err_res_body).unwrap()),
+                    serde_json::to_string(&err_res_body).unwrap(),
                     None,
                 ))
             }

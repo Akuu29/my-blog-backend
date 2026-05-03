@@ -46,9 +46,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::CREATED,
-        Some(serde_json::to_string(&tag).unwrap()),
+        serde_json::to_string(&tag).unwrap(),
         None,
     ))
 }
@@ -78,9 +78,9 @@ where
     let next_cursor = tags.last().map(|tag| tag.id).or(None);
     let paged_body = PagedBody::new(tags, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
+        serde_json::to_string(&paged_body).unwrap(),
         None,
     ))
 }
@@ -125,9 +125,9 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
+    Ok(ApiResponse::json(
         StatusCode::OK,
-        Some(serde_json::to_string(&tags).unwrap()),
+        serde_json::to_string(&tags).unwrap(),
         None,
     ))
 }
