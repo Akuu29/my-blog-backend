@@ -46,12 +46,10 @@ where
                 .map_err(AppError::from)?;
             let api_credentials = ApiCredentials::new(&access_token, user);
 
-            Ok(ApiResponse::json(
-                StatusCode::OK,
-                serde_json::to_string(&api_credentials).unwrap(),
-                None,
-            )
-            .with_header("Cache-Control", "no-store"))
+            let body =
+                serde_json::to_string(&api_credentials).map_err(|e| AppError::Unknown(e.into()))?;
+            Ok(ApiResponse::json(StatusCode::OK, body, None)
+                .with_header("Cache-Control", "no-store"))
         }
         Err(e) => Err(AppError::from(e)),
     }

@@ -65,11 +65,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::json(
-        StatusCode::CREATED,
-        serde_json::to_string(&comment).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&comment).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::CREATED, body, None))
 }
 
 #[tracing::instrument(name = "find_comment", skip(comment_app_service))]
@@ -85,11 +82,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::json(
-        StatusCode::OK,
-        serde_json::to_string(&comment).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&comment).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(name = "all_comments", skip(comment_app_service))]
@@ -116,11 +110,8 @@ where
     let next_cursor = comments.last().map(|comment| comment.id).or(None);
     let paged_body = PagedBody::new(comments, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::json(
-        StatusCode::OK,
-        serde_json::to_string(&paged_body).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&paged_body).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(
@@ -148,11 +139,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::json(
-        StatusCode::OK,
-        serde_json::to_string(&comment).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&comment).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(

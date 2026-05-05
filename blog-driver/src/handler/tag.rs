@@ -46,11 +46,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::json(
-        StatusCode::CREATED,
-        serde_json::to_string(&tag).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&tag).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::CREATED, body, None))
 }
 
 #[tracing::instrument(name = "all_tags", skip(tag_app_service))]
@@ -78,11 +75,8 @@ where
     let next_cursor = tags.last().map(|tag| tag.id).or(None);
     let paged_body = PagedBody::new(tags, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::json(
-        StatusCode::OK,
-        serde_json::to_string(&paged_body).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&paged_body).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(name = "delete_tag", skip(tag_app_service, token_app_service, token))]
@@ -125,9 +119,6 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::json(
-        StatusCode::OK,
-        serde_json::to_string(&tags).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&tags).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }

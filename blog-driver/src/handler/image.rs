@@ -45,11 +45,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::json(
-        StatusCode::CREATED,
-        serde_json::to_string(&image).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&image).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::CREATED, body, None))
 }
 
 #[tracing::instrument(name = "all_images", skip_all, err)]
@@ -65,11 +62,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::json(
-        StatusCode::OK,
-        serde_json::to_string(&images).unwrap(),
-        None,
-    ))
+    let body = serde_json::to_string(&images).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(name = "find_data", skip_all, err, fields(image.id = %image_id))]
