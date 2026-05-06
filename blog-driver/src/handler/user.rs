@@ -69,9 +69,7 @@ where
 
     let id_token_claims = id_token_data.claims;
 
-    let provider_name = id_token_claims
-        .provider_name()
-        .map_err(AppError::from)?;
+    let provider_name = id_token_claims.provider_name().map_err(AppError::from)?;
     let exists_user = user_app_service
         .find_by_user_identity(&provider_name, &id_token_claims.sub())
         .await;
@@ -113,11 +111,10 @@ where
 
                 let api_credentials = ApiCredentials::new(&access_token, user);
 
-                Ok(ApiResponse::new(
-                    StatusCode::OK,
-                    Some(serde_json::to_string(&api_credentials).unwrap()),
-                    Some(updated_jar),
-                ))
+                let body = serde_json::to_string(&api_credentials)
+                    .map_err(|e| AppError::Unknown(e.into()))?;
+                Ok(ApiResponse::json(StatusCode::OK, body, Some(updated_jar))
+                    .with_header("Cache-Control", "no-store"))
             }
             _ => Err(AppError::from(e)),
         },
@@ -156,9 +153,7 @@ where
 
     let id_token_claims = id_token_data.claims;
 
-    let provider_name = id_token_claims
-        .provider_name()
-        .map_err(AppError::from)?;
+    let provider_name = id_token_claims.provider_name().map_err(AppError::from)?;
 
     let exists_user = user_app_service
         .find_by_user_identity(&provider_name, &id_token_claims.sub())
@@ -178,11 +173,10 @@ where
 
             let api_credentials = ApiCredentials::new(&access_token, user);
 
-            Ok(ApiResponse::new(
-                StatusCode::OK,
-                Some(serde_json::to_string(&api_credentials).unwrap()),
-                Some(updated_jar),
-            ))
+            let body =
+                serde_json::to_string(&api_credentials).map_err(|e| AppError::Unknown(e.into()))?;
+            Ok(ApiResponse::json(StatusCode::OK, body, Some(updated_jar))
+                .with_header("Cache-Control", "no-store"))
         }
         Err(e) => Err(AppError::from(e)),
     };
@@ -220,11 +214,8 @@ where
     let next_cursor = users.last().map(|user| user.id).or(None);
     let paged_body = PagedBody::new(users, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&paged_body).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(name = "find_user", skip(user_app_service))]
@@ -240,11 +231,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&user).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&user).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(name = "update_user", skip(user_app_service, token_app_service, token))]
@@ -269,11 +257,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&user).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&user).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(name = "delete_user", skip(user_app_service, token_app_service, token))]

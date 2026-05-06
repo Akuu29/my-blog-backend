@@ -49,11 +49,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
-        StatusCode::CREATED,
-        Some(serde_json::to_string(&category).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&category).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::CREATED, body, None))
 }
 
 #[tracing::instrument(name = "get_all_categories", skip(category_app_service))]
@@ -77,17 +74,11 @@ where
     if has_next {
         categories.pop();
     }
-    let next_cursor = categories
-        .last()
-        .map(|category| category.id)
-        .or(None);
+    let next_cursor = categories.last().map(|category| category.id).or(None);
     let paged_body = PagedBody::new(categories, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&paged_body).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(
@@ -117,11 +108,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&category).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&category).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(

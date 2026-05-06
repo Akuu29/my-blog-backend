@@ -54,11 +54,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
-        StatusCode::CREATED,
-        Some(serde_json::to_string(&article).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&article).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::CREATED, body, None))
 }
 
 #[tracing::instrument(name = "find_article", skip(article_app_service))]
@@ -75,11 +72,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&article).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&article).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(name = "all_articles", skip(article_app_service))]
@@ -107,11 +101,8 @@ where
     let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&paged_body).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(
@@ -142,11 +133,8 @@ where
         .await
         .map_err(AppError::from)?;
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&article).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&article).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
 #[tracing::instrument(
@@ -238,9 +226,6 @@ where
     let next_cursor = articles.last().map(|article| article.id).or(None);
     let paged_body = PagedBody::new(articles, next_cursor, has_next, total.value());
 
-    Ok(ApiResponse::new(
-        StatusCode::OK,
-        Some(serde_json::to_string(&paged_body).unwrap()),
-        None,
-    ))
+    let body = serde_json::to_string(&paged_body).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
