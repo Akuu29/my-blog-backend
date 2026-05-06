@@ -26,9 +26,9 @@ where
         let Json(val) = Json::<T>::from_request(req, state).await.map_err(|e| {
             let res_body =
                 ErrorResponse::new(ErrorCode::InvalidInput, format!("Json parse error: {}", e));
-            ApiResponse::new(
+            ApiResponse::json(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&res_body).unwrap()),
+                serde_json::to_string(&res_body).unwrap(),
                 None,
             )
         })?;
@@ -38,9 +38,9 @@ where
                 ErrorCode::ValidationError,
                 format!("Validation error: {}", e).replace("\n", ", "),
             );
-            ApiResponse::new(
+            ApiResponse::json(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&res_body).unwrap()),
+                serde_json::to_string(&res_body).unwrap(),
                 None,
             )
         })?;

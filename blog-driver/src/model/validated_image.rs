@@ -1,4 +1,7 @@
-use crate::model::{api_response::ApiResponse, error_response::{ErrorCode, ErrorResponse}};
+use crate::model::{
+    api_response::ApiResponse,
+    error_response::{ErrorCode, ErrorResponse},
+};
 use axum::extract::Multipart;
 use axum::{
     async_trait,
@@ -11,7 +14,7 @@ use validator::Validate;
 
 fn api_error_response(code: ErrorCode, message: String, status: StatusCode) -> ApiResponse<String> {
     let err = ErrorResponse::new(code, message);
-    ApiResponse::new(status, Some(serde_json::to_string(&err).unwrap()), None)
+    ApiResponse::json(status, serde_json::to_string(&err).unwrap(), None)
 }
 
 #[derive(Debug)]
@@ -153,11 +156,7 @@ where
                 .unwrap_or((StatusCode::BAD_REQUEST, "Invalid image"));
             let res_body = ErrorResponse::new(ErrorCode::ValidationError, err_msg);
 
-            ApiResponse::new(
-                status_code,
-                Some(serde_json::to_string(&res_body).unwrap()),
-                None,
-            )
+            ApiResponse::json(status_code, serde_json::to_string(&res_body).unwrap(), None)
         })?;
 
         Ok(ValidatedImage(new_image))

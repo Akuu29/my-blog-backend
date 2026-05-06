@@ -30,9 +30,9 @@ where
                 ErrorCode::InvalidInput,
                 format!("Invalid query param: {}", e),
             );
-            ApiResponse::new(
+            ApiResponse::json(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&res_body).unwrap()),
+                serde_json::to_string(&res_body).unwrap(),
                 None,
             )
         })?;
@@ -42,9 +42,9 @@ where
                 ErrorCode::ValidationError,
                 format!("Validation error: {}", e).replace("\n", ", "),
             );
-            ApiResponse::new(
+            ApiResponse::json(
                 StatusCode::BAD_REQUEST,
-                Some(serde_json::to_string(&res_body).unwrap()),
+                serde_json::to_string(&res_body).unwrap(),
                 None,
             )
         })?;
