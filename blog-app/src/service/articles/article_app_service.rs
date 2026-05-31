@@ -73,14 +73,9 @@ where
         article_id: Uuid,
         payload: UpdateArticle,
     ) -> Result<Article, UsecaseError> {
-        // Verify article ownership
-        self.article_service
-            .verify_ownership(article_id, user_id)
-            .await?;
-
         let pre_article = self
-            .article_repository
-            .find(article_id, ArticleFilter::default())
+            .article_service
+            .verify_ownership(article_id, user_id)
             .await?;
 
         if (payload.title.is_none() && pre_article.title.is_none())

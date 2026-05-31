@@ -10,6 +10,7 @@ use axum::{
     routing::{delete, get, patch, post, put},
 };
 use blog_app::{
+    llm::i_summary_generator::ISummaryGenerator,
     query_service::{
         articles_by_tag::i_articles_by_tag_query_service::IArticlesByTagQueryService,
         tags_attached_article::i_tags_attached_article_query_service::ITagsAttachedArticleQueryService,
@@ -18,17 +19,23 @@ use blog_app::{
         articles::article_app_service::ArticleAppService,
         categories::category_app_service::CategoryAppService,
         comments::comment_app_service::CommentAppService,
-        images::image_app_service::ImageAppService, tags::tag_app_service::TagAppService,
+        images::image_app_service::ImageAppService,
+        summaries::summary_app_service::SummaryAppService, tags::tag_app_service::TagAppService,
         tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
     },
 };
 use blog_domain::config::EmailConfig;
 use blog_domain::model::{
-    articles::i_article_repository::IArticleRepository,
+    articles::{
+        i_article_repository::IArticleRepository,
+        i_article_summary_repository::IArticleSummaryRepository,
+    },
     categories::i_category_repository::ICategoryRepository,
     comments::i_comment_repository::ICommentRepository,
-    images::i_image_repository::IImageRepository, tags::i_tag_repository::ITagRepository,
-    tokens::i_token_repository::ITokenRepository, users::i_user_repository::IUserRepository,
+    images::i_image_repository::IImageRepository,
+    tags::i_tag_repository::ITagRepository,
+    tokens::i_token_repository::ITokenRepository,
+    users::i_user_repository::IUserRepository,
 };
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
@@ -48,6 +55,8 @@ impl AppRouter {
         ArticleByTagQS,
         TagsAttachedArticleQS,
         ImageRepo,
+        SummaryRepo,
+        SummaryGen,
     >(
         cors_layer: CorsLayer,
         app_state: AppState,
@@ -62,6 +71,7 @@ impl AppRouter {
         article_by_tag_query_service: ArticleByTagQS,
         tags_attached_article_query_service: TagsAttachedArticleQS,
         image_app_service: ImageAppService<ImageRepo>,
+        summary_app_service: SummaryAppService<ArticleRepo, SummaryRepo, SummaryGen>,
         cookie_service: CookieService,
     ) -> Self
     where
@@ -74,14 +84,23 @@ impl AppRouter {
         ArticleByTagQS: IArticlesByTagQueryService,
         TagsAttachedArticleQS: ITagsAttachedArticleQueryService,
         ImageRepo: IImageRepository,
+        SummaryRepo: IArticleSummaryRepository,
+        SummaryGen: ISummaryGenerator,
     {
         let token_router = Self::create_token_router::<TokenRepo, UserRepo>();
         let users_router = Self::create_users_router::<TokenRepo, UserRepo>();
-        let articles_router =
-            Self::create_articles_router::<TokenRepo, ArticleRepo, ArticleByTagQS, TagRep>(
-                article_app_service,
-                article_by_tag_query_service,
-            );
+        let articles_router = Self::create_articles_router::<
+            TokenRepo,
+            ArticleRepo,
+            ArticleByTagQS,
+            TagRep,
+            SummaryRepo,
+            SummaryGen,
+        >(
+            article_app_service,
+            article_by_tag_query_service,
+            summary_app_service,
+        );
         let comments_router =
             Self::create_comments_router::<CommentRepo, TokenRepo>(comment_app_service);
         let category_router =
@@ -140,15 +159,18 @@ impl AppRouter {
             )
     }
 
-    fn create_articles_router<T, U, V, X>(
+    fn create_articles_router<T, U, V, X, S, G>(
         article_app_service: ArticleAppService<U, X>,
         article_by_tag_query_service: V,
+        summary_app_service: SummaryAppService<U, S, G>,
     ) -> Router<AppState>
     where
         T: ITokenRepository,
         U: IArticleRepository,
         V: IArticlesByTagQueryService,
         X: ITagRepository,
+        S: IArticleSummaryRepository,
+        G: ISummaryGenerator,
     {
         Router::new()
             .route(
@@ -162,7 +184,12 @@ impl AppRouter {
                     .delete(article::delete_article::<U, T, X>),
             )
             .route("/:article_id/tags", put(article::attach_tags::<T, U, X>))
+            .route(
+                "/:article_id/summary",
+                post(article::generate_summary::<U, T, S, G>),
+            )
             .route("/tags", get(article::find_articles_by_tag::<V>))
+            .route_layer(Extension(Arc::new(summary_app_service)))
             .route_layer(Extension(Arc::new(article_app_service)))
             .route_layer(Extension(Arc::new(article_by_tag_query_service)))
     }

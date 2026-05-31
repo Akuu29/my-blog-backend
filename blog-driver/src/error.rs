@@ -49,10 +49,16 @@ impl IntoResponse for AppError {
             ErrorCategory::Internal => {
                 tracing::error!(error = ?self, "Unexpected error occurred");
             }
-            ErrorCategory::Authentication | ErrorCategory::Authorization => {
+            ErrorCategory::Authentication
+            | ErrorCategory::Authorization
+            | ErrorCategory::RateLimit
+            | ErrorCategory::ExternalService => {
                 tracing::warn!(error = %self, category = %category, "Request failed");
             }
-            _ => {
+            ErrorCategory::NotFound
+            | ErrorCategory::Validation
+            | ErrorCategory::Conflict
+            | ErrorCategory::ContentPolicy => {
                 tracing::info!(error = %self, category = %category, "Request failed");
             }
         }
@@ -77,7 +83,22 @@ impl IntoResponse for AppError {
                 "Validation failed",
             ),
             ErrorCategory::Conflict => (StatusCode::CONFLICT, ErrorCode::Conflict, "Conflict"),
-            _ => (
+            ErrorCategory::RateLimit => (
+                StatusCode::TOO_MANY_REQUESTS,
+                ErrorCode::ServiceUnavailable,
+                "Summary generation is temporarily unavailable. Please try again later.",
+            ),
+            ErrorCategory::ExternalService => (
+                StatusCode::BAD_GATEWAY,
+                ErrorCode::ExternalServiceError,
+                "External service error. Please try again later.",
+            ),
+            ErrorCategory::ContentPolicy => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ErrorCode::InvalidInput,
+                "The article content could not be processed.",
+            ),
+            ErrorCategory::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ErrorCode::InternalError,
                 "Internal server error",

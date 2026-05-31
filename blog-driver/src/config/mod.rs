@@ -3,6 +3,7 @@ pub mod cookie_config;
 pub use cookie_config::CookieConfig;
 
 use blog_adapter::config::FirebaseConfig;
+use blog_adapter::llm::config::LlmConfig;
 use blog_app::config::{ImageConfig, TokenConfig};
 use blog_domain::config::EmailConfig;
 
@@ -32,6 +33,8 @@ pub struct AppConfig {
     pub image_config: ImageConfig,
     /// Firebase JWKS endpoint config. Passed to `TokenRepository`.
     pub firebase_config: FirebaseConfig,
+    /// LLM config for article summary generation. Passed to `SummaryGenerator`.
+    pub llm_config: LlmConfig,
 }
 
 impl AppConfig {
@@ -64,6 +67,7 @@ impl AppConfig {
             token_config: TokenConfig::from_env(),
             image_config: ImageConfig::from_env(),
             firebase_config: FirebaseConfig::from_env(),
+            llm_config: LlmConfig::from_env(),
         }
     }
 }

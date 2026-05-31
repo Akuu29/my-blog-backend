@@ -3,6 +3,7 @@ pub mod categories;
 pub mod comments;
 pub mod error;
 pub mod images;
+pub mod summaries;
 pub mod tags;
 pub mod tokens;
 pub mod users;
