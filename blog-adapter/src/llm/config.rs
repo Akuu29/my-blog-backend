@@ -1,5 +1,5 @@
 /// Configuration for LLM-based article summary generation.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LlmConfig {
     /// API key for the Gemini API.
     pub api_key: String,

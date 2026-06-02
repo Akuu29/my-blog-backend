@@ -22,7 +22,7 @@ impl SummaryGeneratorError {
         match self {
             Self::RateLimit { .. } => ErrorCategory::RateLimit,
             Self::ContentPolicyViolation => ErrorCategory::ContentPolicy,
-            Self::ContextLengthExceeded => ErrorCategory::ContentPolicy,
+            Self::ContextLengthExceeded => ErrorCategory::Validation,
             Self::Timeout => ErrorCategory::ExternalService,
             Self::ApiError(_) => ErrorCategory::ExternalService,
         }

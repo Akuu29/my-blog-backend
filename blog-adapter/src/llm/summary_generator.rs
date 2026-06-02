@@ -102,8 +102,14 @@ impl SummaryGenerator {
                     .into_iter()
                     .next()
                     .and_then(|c| c.content)
-                    .and_then(|content| content.parts.into_iter().next())
-                    .map(|p| p.text)
+                    .map(|content| {
+                        content
+                            .parts
+                            .into_iter()
+                            .map(|p| p.text)
+                            .collect::<String>()
+                    })
+                    .filter(|text| !text.is_empty())
                     .ok_or_else(|| SummaryGeneratorError::ApiError("empty response".to_string()))?;
 
                 if text.chars().count() > MAX_SUMMARY_CHARS {
