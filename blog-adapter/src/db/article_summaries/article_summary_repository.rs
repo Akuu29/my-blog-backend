@@ -49,4 +49,42 @@ impl IArticleSummaryRepository for ArticleSummaryRepository {
 
         Ok(summary)
     }
+
+    async fn find(&self, article_id: Uuid) -> Result<ArticleSummary, RepositoryError> {
+        let summary = sqlx::query_as::<_, ArticleSummary>(
+            r#"
+            SELECT article_id, content, lang, locale, created_at, updated_at
+            FROM article_summaries
+            WHERE article_id = $1
+            "#,
+        )
+        .bind(article_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            e => RepositoryError::Unknown(Box::new(e)),
+        })?;
+
+        Ok(summary)
+    }
+
+    async fn delete(&self, article_id: Uuid) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            r#"
+            DELETE FROM article_summaries
+            WHERE article_id = $1
+            "#,
+        )
+        .bind(article_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Unknown(Box::new(e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+
+        Ok(())
+    }
 }

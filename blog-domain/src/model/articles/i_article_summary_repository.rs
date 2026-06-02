@@ -12,4 +12,8 @@ pub trait IArticleSummaryRepository: Clone + Send + Sync + 'static {
         article_id: Uuid,
         new_summary: NewArticleSummary,
     ) -> Result<ArticleSummary, RepositoryError>;
+
+    async fn find(&self, article_id: Uuid) -> Result<ArticleSummary, RepositoryError>;
+
+    async fn delete(&self, article_id: Uuid) -> Result<(), RepositoryError>;
 }

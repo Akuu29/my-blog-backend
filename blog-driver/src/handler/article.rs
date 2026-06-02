@@ -248,6 +248,55 @@ where
     Ok(ApiResponse::json(StatusCode::OK, body, None))
 }
 
+#[tracing::instrument(name = "find_summary", skip(summary_app_service))]
+pub async fn find_summary<A, U, S, G>(
+    Extension(summary_app_service): Extension<Arc<SummaryAppService<A, S, G>>>,
+    Path(article_id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError>
+where
+    A: IArticleRepository,
+    U: ITokenRepository,
+    S: IArticleSummaryRepository,
+    G: ISummaryGenerator,
+{
+    let summary = summary_app_service
+        .find(article_id)
+        .await
+        .map_err(AppError::from)?;
+
+    let body = serde_json::to_string(&summary).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
+}
+
+#[tracing::instrument(
+    name = "delete_summary",
+    skip(summary_app_service, token_app_service, token)
+)]
+pub async fn delete_summary<A, U, S, G>(
+    Extension(summary_app_service): Extension<Arc<SummaryAppService<A, S, G>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
+    Path(article_id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError>
+where
+    A: IArticleRepository,
+    U: ITokenRepository,
+    S: IArticleSummaryRepository,
+    G: ISummaryGenerator,
+{
+    let access_token_data = token_app_service
+        .verify_access_token(token)
+        .await
+        .map_err(AppError::from)?;
+
+    summary_app_service
+        .delete_with_auth(access_token_data.claims.sub(), article_id)
+        .await
+        .map_err(AppError::from)?;
+
+    Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
+}
+
 #[tracing::instrument(name = "find_articles_by_tag", skip(articles_by_tag_query_service))]
 pub async fn find_articles_by_tag<T>(
     Extension(articles_by_tag_query_service): Extension<Arc<T>>,

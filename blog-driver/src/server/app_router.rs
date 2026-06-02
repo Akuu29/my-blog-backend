@@ -186,7 +186,9 @@ impl AppRouter {
             .route("/:article_id/tags", put(article::attach_tags::<T, U, X>))
             .route(
                 "/:article_id/summary",
-                post(article::generate_summary::<U, T, S, G>),
+                get(article::find_summary::<U, T, S, G>)
+                    .post(article::generate_summary::<U, T, S, G>)
+                    .delete(article::delete_summary::<U, T, S, G>),
             )
             .route("/tags", get(article::find_articles_by_tag::<V>))
             .route_layer(Extension(Arc::new(summary_app_service)))

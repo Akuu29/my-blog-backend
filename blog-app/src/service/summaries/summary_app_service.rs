@@ -90,4 +90,23 @@ where
 
         Ok(summary)
     }
+
+    pub async fn find(&self, article_id: Uuid) -> Result<ArticleSummary, UsecaseError> {
+        let summary = self.summary_repository.find(article_id).await?;
+        Ok(summary)
+    }
+
+    pub async fn delete_with_auth(
+        &self,
+        user_id: Uuid,
+        article_id: Uuid,
+    ) -> Result<(), UsecaseError> {
+        self.article_service
+            .verify_ownership(article_id, user_id)
+            .await?;
+
+        self.summary_repository.delete(article_id).await?;
+
+        Ok(())
+    }
 }
