@@ -11,23 +11,36 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+
 use blog_app::{
+    llm::i_summary_generator::ISummaryGenerator,
     query_service::articles_by_tag::i_articles_by_tag_query_service::{
         ArticlesByTagFilter, IArticlesByTagQueryService,
     },
     service::articles::article_app_service::ArticleAppService,
+    service::summaries::summary_app_service::SummaryAppService,
     service::tokens::token_app_service::TokenAppService,
 };
 use blog_domain::model::{
     articles::{
         article::{NewArticle, UpdateArticle},
+        article_summary::SummaryLanguage,
         i_article_repository::{ArticleFilter, IArticleRepository},
+        i_article_summary_repository::IArticleSummaryRepository,
     },
     tags::i_tag_repository::ITagRepository,
     tokens::{i_token_repository::ITokenRepository, token_string::AccessTokenString},
 };
+use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
+use validator::Validate;
+
+#[derive(Debug, Deserialize, Validate)]
+pub(crate) struct SummaryQueryParam {
+    lang: Option<SummaryLanguage>,
+    locale: Option<String>,
+}
 
 #[tracing::instrument(
     name = "create_article",
@@ -197,6 +210,91 @@ where
         .map_err(AppError::from)?;
 
     Ok(ApiResponse::<()>::new(StatusCode::OK, None, None))
+}
+
+#[tracing::instrument(
+    name = "generate_summary",
+    skip(summary_app_service, token_app_service, token)
+)]
+pub async fn generate_summary<A, U, S, G>(
+    Extension(summary_app_service): Extension<Arc<SummaryAppService<A, S, G>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
+    Path(article_id): Path<Uuid>,
+    ValidatedQueryParam(params): ValidatedQueryParam<SummaryQueryParam>,
+) -> Result<impl IntoResponse, AppError>
+where
+    A: IArticleRepository,
+    U: ITokenRepository,
+    S: IArticleSummaryRepository,
+    G: ISummaryGenerator,
+{
+    let access_token_data = token_app_service
+        .verify_access_token(token)
+        .await
+        .map_err(AppError::from)?;
+
+    let summary = summary_app_service
+        .generate_with_auth(
+            access_token_data.claims.sub(),
+            article_id,
+            params.lang.unwrap_or(SummaryLanguage::En),
+            params.locale,
+        )
+        .await
+        .map_err(AppError::from)?;
+
+    let body = serde_json::to_string(&summary).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
+}
+
+#[tracing::instrument(name = "find_summary", skip(summary_app_service))]
+pub async fn find_summary<A, U, S, G>(
+    Extension(summary_app_service): Extension<Arc<SummaryAppService<A, S, G>>>,
+    Path(article_id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError>
+where
+    A: IArticleRepository,
+    U: ITokenRepository,
+    S: IArticleSummaryRepository,
+    G: ISummaryGenerator,
+{
+    let summary = summary_app_service
+        .find(article_id)
+        .await
+        .map_err(AppError::from)?;
+
+    let body = serde_json::to_string(&summary).map_err(|e| AppError::Unknown(e.into()))?;
+    Ok(ApiResponse::json(StatusCode::OK, body, None))
+}
+
+#[tracing::instrument(
+    name = "delete_summary",
+    skip(summary_app_service, token_app_service, token)
+)]
+pub async fn delete_summary<A, U, S, G>(
+    Extension(summary_app_service): Extension<Arc<SummaryAppService<A, S, G>>>,
+    Extension(token_app_service): Extension<Arc<TokenAppService<U>>>,
+    AuthToken(token): AuthToken<AccessTokenString>,
+    Path(article_id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError>
+where
+    A: IArticleRepository,
+    U: ITokenRepository,
+    S: IArticleSummaryRepository,
+    G: ISummaryGenerator,
+{
+    let access_token_data = token_app_service
+        .verify_access_token(token)
+        .await
+        .map_err(AppError::from)?;
+
+    summary_app_service
+        .delete_with_auth(access_token_data.claims.sub(), article_id)
+        .await
+        .map_err(AppError::from)?;
+
+    Ok(ApiResponse::<()>::new(StatusCode::NO_CONTENT, None, None))
 }
 
 #[tracing::instrument(name = "find_articles_by_tag", skip(articles_by_tag_query_service))]

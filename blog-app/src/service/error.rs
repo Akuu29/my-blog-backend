@@ -1,3 +1,4 @@
+use crate::llm::error::SummaryGeneratorError;
 use blog_domain::{
     error::ErrorCategory, model::error::RepositoryError, service::error::DomainServiceError,
 };
@@ -10,6 +11,8 @@ pub enum UsecaseError {
     DomainError(#[from] DomainServiceError),
     #[error(transparent)]
     Repository(#[from] RepositoryError),
+    #[error("LLM error: {0}")]
+    LlmError(#[from] SummaryGeneratorError),
 }
 
 impl UsecaseError {
@@ -18,6 +21,7 @@ impl UsecaseError {
             Self::ValidationFailed(_) => ErrorCategory::Validation,
             Self::DomainError(e) => e.category(),
             Self::Repository(e) => e.category(),
+            Self::LlmError(e) => e.category(),
         }
     }
 }
