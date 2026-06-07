@@ -1,3 +1,4 @@
+pub mod article_summaries;
 pub mod articles;
 pub mod categories;
 pub mod comments;

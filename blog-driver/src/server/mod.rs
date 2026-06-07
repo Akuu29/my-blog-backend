@@ -4,6 +4,7 @@ use axum::http::Method;
 use axum_extra::extract::cookie::Key;
 use blog_adapter::{
     db::{
+        article_summaries::article_summary_repository::ArticleSummaryRepository,
         articles::article_repository::ArticleRepository,
         categories::category_repository::CategoryRepository,
         comments::comment_repository::CommentRepository,
@@ -16,13 +17,14 @@ use blog_adapter::{
         users::user_repository::UserRepository,
     },
     idp::tokens::token_repository::TokenRepository,
+    llm::summary_generator::SummaryGenerator,
 };
 use blog_app::service::{
     articles::article_app_service::ArticleAppService,
     categories::category_app_service::CategoryAppService,
     comments::comment_app_service::CommentAppService, images::image_app_service::ImageAppService,
-    tags::tag_app_service::TagAppService, tokens::token_app_service::TokenAppService,
-    users::user_app_service::UserAppService,
+    summaries::summary_app_service::SummaryAppService, tags::tag_app_service::TagAppService,
+    tokens::token_app_service::TokenAppService, users::user_app_service::UserAppService,
 };
 use http::{
     HeaderValue,
@@ -82,6 +84,12 @@ pub async fn run() {
     let image_app_service =
         ImageAppService::new(ImageRepository::new(pool.clone()), config.image_config);
 
+    let summary_app_service = SummaryAppService::new(
+        ArticleRepository::new(pool.clone()),
+        ArticleSummaryRepository::new(pool.clone()),
+        SummaryGenerator::new(config.llm_config),
+    );
+
     // query services
     let article_by_tag_query_service = ArticlesByTagQueryService::new(pool.clone());
     let tags_attached_article_query_service = TagsAttachedArticleQueryService::new(pool.clone());
@@ -125,6 +133,7 @@ pub async fn run() {
         article_by_tag_query_service,
         tags_attached_article_query_service,
         image_app_service,
+        summary_app_service,
         cookie_service,
     );
 
