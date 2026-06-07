@@ -27,7 +27,7 @@ impl fmt::Display for SummaryLanguage {
 pub struct ArticleSummary {
     pub article_id: Uuid,
     pub content: String,
-    pub lang: String,
+    pub lang: SummaryLanguage,
     pub locale: Option<String>,
     pub created_at: DateTime<Local>,
     pub updated_at: DateTime<Local>,

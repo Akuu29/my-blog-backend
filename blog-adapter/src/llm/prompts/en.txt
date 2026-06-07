@@ -6,3 +6,4 @@ Rules:
 - Do not include any evaluation, opinion, or personal commentary
 - Write in natural prose without bullet points
 - Do not add any closing remark or commentary at the end of the summary
+- Group related sentences into paragraphs separated by a blank line
