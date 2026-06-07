@@ -8,6 +8,9 @@ pub enum ErrorCategory {
     Validation,
     NotFound,
     Conflict,
+    RateLimit,
+    ExternalService,
+    ContentPolicy,
     Internal,
 }
 
@@ -19,6 +22,9 @@ impl std::fmt::Display for ErrorCategory {
             Self::Validation => "Validation",
             Self::NotFound => "NotFound",
             Self::Conflict => "Conflict",
+            Self::RateLimit => "RateLimit",
+            Self::ExternalService => "ExternalService",
+            Self::ContentPolicy => "ContentPolicy",
             Self::Internal => "Internal",
         };
         write!(f, "{s}")

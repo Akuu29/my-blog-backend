@@ -1,4 +1,7 @@
-use crate::model::articles::i_article_repository::{ArticleFilter, IArticleRepository};
+use crate::model::articles::{
+    article::Article,
+    i_article_repository::{ArticleFilter, IArticleRepository},
+};
 use crate::service::error::DomainServiceError;
 use uuid::Uuid;
 
@@ -22,7 +25,7 @@ where
         &self,
         article_id: Uuid,
         user_id: Uuid,
-    ) -> Result<(), DomainServiceError> {
+    ) -> Result<Article, DomainServiceError> {
         let article = self
             .repository
             .find(article_id, ArticleFilter::default())
@@ -32,6 +35,6 @@ where
             return Err(DomainServiceError::Unauthorized);
         }
 
-        Ok(())
+        Ok(article)
     }
 }
